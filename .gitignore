@@ -1,0 +1,25 @@
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# Java / Maven
+target/
+*.jar
+*.war
+.mvn/
+!/.mvn/wrapper/maven-wrapper.properties
+
+# Angular / Node
+node_modules/
+dist/
+/ecowatch-frontend/out-tsc/
+/ecowatch-frontend/.angular/
+
+# Logs, SO e Outros
+*.log
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
