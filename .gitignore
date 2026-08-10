@@ -1,25 +1,86 @@
-# IDEs
+# ==========================================
+# ECOWATCH BRASIL - GITIGNORE CONFIGURATION
+# ==========================================
+
+# 1. Credenciais, Segredos e Chaves de API (CRÍTICO)
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+firebase-service-account.json
+*service-account*.json
+google-services.json
+*.pem
+*.key
+*.p12
+*.jks
+
+# 2. Configurações de IDEs e Editores
 .idea/
 *.iml
+*.iws
+*.ipr
 .vscode/
+.classpath
+.project
+.settings/
+.factorypath
+.apt_generated
+.springBeans
+.sts4-cache
+/nbproject/
+/nbbuild/
+/nbdist/
+/.nb-gradle/
 
-# Java / Maven
+# 3. Java, Maven e Gradle (Artefatos de Build)
 target/
+**/target/
+build/
+**/build/
+out/
+**/out/
+bin/
+**/bin/
+*.class
 *.jar
 *.war
-.mvn/
-!/.mvn/wrapper/maven-wrapper.properties
+*.ear
+*.rar
+.gradle/
 
-# Angular / Node
+# Manter o Maven Wrapper nos subprojetos
+.mvn/
+!.mvn/wrapper/maven-wrapper.properties
+!.mvn/wrapper/maven-wrapper.jar
+!**/.mvn/wrapper/maven-wrapper.properties
+!**/.mvn/wrapper/maven-wrapper.jar
+
+# 4. Node.js e Frontend (se houver)
 node_modules/
 dist/
 /ecowatch-frontend/out-tsc/
 /ecowatch-frontend/.angular/
+.next/
+.nuxt/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Logs, SO e Outros
+# 5. Arquivos de Log e Sistema Operacional
 *.log
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Secrets
-.env
+# 6. Ferramentas e Agentes Locais
+.agents/
+skills-lock.json
+.antigravity/
+.gemini/
