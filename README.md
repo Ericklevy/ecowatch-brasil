@@ -382,6 +382,7 @@ Na Azure, as credenciais são injetadas como **secrets** no Container App:
 ## 🔒 Segurança
 
 ### Implementado
+- **Rate Limiting**: Algoritmo Token Bucket via **Bucket4j** (30 req/min por IP) protegendo todos os endpoints `/api/**` contra ataques de força bruta e DoS
 - **CORS**: `@CrossOrigin(origins = "*")` no `DashboardController` (único endpoint público)
 - **Validação de input**: payload JSON validado contra o schema `WeatherReading` antes de enviar ao Kafka — retorna 400 para dados malformados
 - **Guarda de concorrência**: endpoint `/api/scheduler/trigger` usa `AtomicBoolean` para impedir execuções duplicadas — retorna 429 se coleta já estiver em andamento
@@ -389,8 +390,7 @@ Na Azure, as credenciais são injetadas como **secrets** no Container App:
 - **Ingress restrito**: apenas `read-model-service` com acesso externo; demais serviços são internos
 
 ### Planejado
-- **Rate Limiting**: Bucket4j ou Spring Cloud Gateway para limitar requisições por IP
-- **Autenticação JWT**: Spring Security + Supabase Auth para proteger endpoints do Dashboard
+- **Autenticação JWT**: Spring Security + Supabase Auth para proteger rotas administrativas
 - **TLS end-to-end**: HTTPS no Azure Container Apps (automático via domínio `azurecontainerapps.io`)
 
 ---
