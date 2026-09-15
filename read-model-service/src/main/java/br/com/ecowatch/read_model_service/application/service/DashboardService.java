@@ -5,6 +5,7 @@ import br.com.ecowatch.read_model_service.application.dto.DashboardDTO;
 import br.com.ecowatch.read_model_service.application.dto.PrevisaoDTO;
 import br.com.ecowatch.read_model_service.infrastructure.persistence.AlertRepository;
 import br.com.ecowatch.read_model_service.infrastructure.persistence.PrevisaoRepository;
+import br.com.ecowatch.read_model_service.util.CityNameNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -26,9 +27,18 @@ public class DashboardService {
     public DashboardDTO getDashboard(String municipio) {
         log.info("📊 Buscando dashboard para {}", municipio);
 
-        // Últimos 10 alertas do município
-        var alertas = alertRepository.findByMunicipioOrderByDataHoraAlertaDesc(municipio)
-                .stream()
+        String normalizedQuery = CityNameNormalizer.normalize(municipio);
+
+        // Busca alertas por município padronizado
+        var alertEntities = alertRepository.findByMunicipioIgnoreCaseOrderByDataHoraAlertaDesc(normalizedQuery);
+        if (alertEntities.isEmpty()) {
+            alertEntities = alertRepository.findAllByOrderByDataHoraAlertaDesc()
+                    .stream()
+                    .filter(a -> CityNameNormalizer.normalize(a.getMunicipio()).equals(normalizedQuery))
+                    .collect(Collectors.toList());
+        }
+
+        var alertas = alertEntities.stream()
                 .limit(10)
                 .map(alert -> new AlertDTO(
                         alert.getId(),
@@ -41,10 +51,16 @@ public class DashboardService {
                 .collect(Collectors.toList());
 
         // Previsões para os próximos 3 dias
-        var previsoes = previsaoRepository.findByDataPrevisaoAfterOrderByDataPrevisaoAsc(LocalDate.now().minusDays(1))
-                .stream()
+        var previsaoEntities = previsaoRepository.findByMunicipioIgnoreCaseAndDataPrevisaoAfterOrderByDataPrevisaoAsc(normalizedQuery, LocalDate.now().minusDays(1));
+        if (previsaoEntities.isEmpty()) {
+            previsaoEntities = previsaoRepository.findByDataPrevisaoAfterOrderByDataPrevisaoAsc(LocalDate.now().minusDays(1))
+                    .stream()
+                    .filter(p -> CityNameNormalizer.normalize(p.getMunicipio()).equals(normalizedQuery))
+                    .collect(Collectors.toList());
+        }
+
+        var previsoes = previsaoEntities.stream()
                 .limit(3)
-                .filter(p -> p.getMunicipio().equalsIgnoreCase(municipio))
                 .map(p -> new PrevisaoDTO(
                         p.getMunicipio(),
                         p.getDataPrevisao(),
@@ -56,6 +72,6 @@ public class DashboardService {
                 ))
                 .collect(Collectors.toList());
 
-        return new DashboardDTO(municipio, alertas, previsoes);
+        return new DashboardDTO(normalizedQuery, alertas, previsoes);
     }
 }

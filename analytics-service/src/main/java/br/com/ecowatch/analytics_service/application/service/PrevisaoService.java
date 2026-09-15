@@ -2,6 +2,7 @@ package br.com.ecowatch.analytics_service.application.service;
 
 import br.com.ecowatch.analytics_service.infrastructure.persistence.PrevisaoEntity;
 import br.com.ecowatch.analytics_service.infrastructure.persistence.PrevisaoRepository;
+import br.com.ecowatch.analytics_service.util.CityNameNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -17,8 +19,11 @@ public class PrevisaoService {
 
     private final PrevisaoRepository repository;
 
-    // Lista de cidades monitoradas (pode vir do banco ou de uma propriedade)
-    private static final List<String> CIDADES = List.of("Brasília", "Rio de Janeiro", "São Paulo");
+    // Lista de cidades monitoradas (padronizadas)
+    private static final List<String> CIDADES_BASE = List.of(
+            "Brasília", "Rio de Janeiro", "São Paulo", "Salvador",
+            "Recife", "Porto Alegre", "Curitiba", "Belo Horizonte", "Fortaleza", "Manaus"
+    );
 
     private final Random random = new Random();
 
@@ -31,20 +36,27 @@ public class PrevisaoService {
         LocalDate amanha = hoje.plusDays(1);
         LocalDate depois = hoje.plusDays(2);
 
-        for (String cidade : CIDADES) {
+        List<String> cidadesPadronizadas = CIDADES_BASE.stream()
+                .map(CityNameNormalizer::normalize)
+                .distinct()
+                .collect(Collectors.toList());
+
+        for (String cidade : cidadesPadronizadas) {
             // Gera previsões para amanhã e depois de amanhã
             gerarPrevisaoPara(cidade, amanha);
             gerarPrevisaoPara(cidade, depois);
         }
 
-        log.info("✅ Previsões geradas para {} cidades", CIDADES.size());
+        log.info("✅ Previsões geradas para {} cidades", cidadesPadronizadas.size());
     }
 
     private void gerarPrevisaoPara(String municipio, LocalDate data) {
+        String municipioNormalizado = CityNameNormalizer.normalize(municipio);
+
         // Verifica se já existe previsão para essa data (evita duplicidade)
-        var existentes = repository.findByMunicipioAndDataPrevisaoAfter(municipio, data.minusDays(1));
+        var existentes = repository.findByMunicipioAndDataPrevisaoAfter(municipioNormalizado, data.minusDays(1));
         if (existentes.stream().anyMatch(p -> p.getDataPrevisao().equals(data))) {
-            log.debug("⏩ Previsão para {} em {} já existe, pulando...", municipio, data);
+            log.debug("⏩ Previsão para {} em {} já existe, pulando...", municipioNormalizado, data);
             return;
         }
 
@@ -56,7 +68,7 @@ public class PrevisaoService {
         int riscoDengue = (int) (umidadeBase > 70 && tempBase > 28 ? 40 + random.nextInt(40) : random.nextInt(20));
 
         PrevisaoEntity entity = new PrevisaoEntity(
-                municipio,
+                municipioNormalizado,
                 data,
                 Math.round(tempBase * 100.0) / 100.0,
                 Math.round(precipBase * 100.0) / 100.0,
@@ -67,7 +79,7 @@ public class PrevisaoService {
 
         repository.save(entity);
         log.info("📊 Previsão salva para {} em {}: temp={}°C, precip={}mm, umidade={}%",
-                municipio, data, entity.getTemperaturaPrevista(),
+                municipioNormalizado, data, entity.getTemperaturaPrevista(),
                 entity.getPrecipitacaoPrevista(), entity.getUmidadePrevista());
     }
 }

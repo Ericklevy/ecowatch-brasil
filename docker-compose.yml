@@ -1,42 +1,74 @@
 version: '3.8'
 
 services:
-  # --- MENSAGERIA ---
+
+  # ════════════════════════════════════════
+  # INFRA — Mensageria, Cache e Banco Local
+  # ════════════════════════════════════════
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
+    container_name: ecowatch-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
-    networks:
-      - ecowatch-network
+      ZOOKEEPER_TICK_TIME: 2000
+    networks: [ecowatch-network]
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
-    depends_on:
-      - zookeeper
+    container_name: ecowatch-kafka
+    depends_on: [zookeeper]
     ports:
-      - "9092:9092"
+      - "9092:9092"   # acesso externo (Insomnia/Swagger)
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    networks:
-      - ecowatch-network
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks: [ecowatch-network]
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
+    container_name: ecowatch-rabbitmq
     ports:
       - "5672:5672"
-      - "15672:15672" # Painel web (guest/guest)
+      - "15672:15672"   # painel web: http://localhost:15672 (guest/guest)
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
-    networks:
-      - ecowatch-network
+    networks: [ecowatch-network]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
-  # --- BANCOS DE DADOS ---
+  redis:
+    image: redis:7-alpine
+    container_name: ecowatch-redis
+    ports:
+      - "6379:6379"
+    networks: [ecowatch-network]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   postgres:
     image: postgres:15-alpine
+    container_name: ecowatch-postgres
     ports:
       - "5433:5432"
     environment:
@@ -44,19 +76,117 @@ services:
       POSTGRES_USER: ecowatch
       POSTGRES_PASSWORD: ecowatch123
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - ecowatch-network
+      - ecowatch-brasil_postgres_data:/var/lib/postgresql/data
+    networks: [ecowatch-network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecowatch -d ecowatch"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  redis:
-    image: redis:7-alpine
+  # ════════════════════════════════════════
+  # SERVIÇOS JAVA
+  # ════════════════════════════════════════
+
+  data-ingestion:
+    build:
+      context: ./data-ingestion-service
+      dockerfile: Dockerfile
+    container_name: ecowatch-data-ingestion
     ports:
-      - "6379:6379"
-    networks:
-      - ecowatch-network
+      - "8083:8083"
+    env_file: .env
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_REDIS_URL: redis://redis:6379
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [ecowatch-network]
+    restart: on-failure
 
+  alert-service:
+    build:
+      context: ./alert-service
+      dockerfile: Dockerfile
+    container_name: ecowatch-alert
+    ports:
+      - "8081:8081"
+    env_file: .env
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_REDIS_URL: redis://redis:6379
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ecowatch
+    depends_on:
+      kafka:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks: [ecowatch-network]
+    restart: on-failure
+
+  read-model:
+    build:
+      context: ./read-model-service
+      dockerfile: Dockerfile
+    container_name: ecowatch-read-model
+    ports:
+      - "8086:8086"
+    env_file: .env
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_REDIS_URL: redis://redis:6379
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ecowatch
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks: [ecowatch-network]
+    restart: on-failure
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: ecowatch-notification
+    ports:
+      - "8084:8084"
+    env_file: .env
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks: [ecowatch-network]
+    restart: on-failure
+
+  analytics-service:
+    build:
+      context: ./analytics-service
+      dockerfile: Dockerfile
+    container_name: ecowatch-analytics
+    ports:
+      - "8085:8085"
+    env_file: .env
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ecowatch
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks: [ecowatch-network]
+    restart: on-failure
+
+# ════════════════════════════════════════
 volumes:
-  postgres_data:
+  ecowatch-brasil_postgres_data:
+    external: true
 
 networks:
   ecowatch-network:

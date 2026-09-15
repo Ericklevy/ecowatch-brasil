@@ -10,5 +10,6 @@ import java.util.List;
 @Repository
 public interface PrevisaoRepository extends JpaRepository<PrevisaoEntity, Long> {
     List<PrevisaoEntity> findByMunicipioOrderByDataPrevisaoDesc(String municipio);
+    List<PrevisaoEntity> findByMunicipioIgnoreCaseAndDataPrevisaoAfterOrderByDataPrevisaoAsc(String municipio, LocalDate data);
     List<PrevisaoEntity> findByDataPrevisaoAfterOrderByDataPrevisaoAsc(LocalDate data);
 }

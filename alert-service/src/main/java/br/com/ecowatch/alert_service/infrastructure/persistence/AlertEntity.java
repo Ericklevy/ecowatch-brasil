@@ -1,12 +1,14 @@
 package br.com.ecowatch.alert_service.infrastructure.persistence;
 
 import br.com.ecowatch.alert_service.domain.model.AlertType;
+import br.com.ecowatch.alert_service.util.CityNameNormalizer;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "alertas_gerados")
@@ -30,11 +32,15 @@ public class AlertEntity {
     private LocalDateTime dataHoraAlerta;  // momento do processamento
 
     public AlertEntity(String municipio, String estado, AlertType tipoAlerta, String mensagem, LocalDateTime timestampLeitura) {
-        this.municipio = municipio;
+        this.municipio = CityNameNormalizer.normalize(municipio);
         this.estado = estado;
         this.tipoAlerta = tipoAlerta;
         this.mensagem = mensagem;
         this.dataHoraLeitura = timestampLeitura;
-        this.dataHoraAlerta = LocalDateTime.now();
+        this.dataHoraAlerta = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+    }
+
+    public void setMunicipio(String municipio) {
+        this.municipio = CityNameNormalizer.normalize(municipio);
     }
 }

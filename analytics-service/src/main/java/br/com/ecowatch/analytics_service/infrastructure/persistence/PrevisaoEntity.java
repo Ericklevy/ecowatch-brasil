@@ -1,5 +1,6 @@
 package br.com.ecowatch.analytics_service.infrastructure.persistence;
 
+import br.com.ecowatch.analytics_service.util.CityNameNormalizer;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -7,6 +8,7 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "previsoes")
@@ -46,13 +48,17 @@ public class PrevisaoEntity {
     public PrevisaoEntity(String municipio, LocalDate dataPrevisao, Double temperaturaPrevista,
                           Double precipitacaoPrevista, Double umidadePrevista,
                           Integer riscoIncendio, Integer riscoDengue) {
-        this.municipio = municipio;
+        this.municipio = CityNameNormalizer.normalize(municipio);
         this.dataPrevisao = dataPrevisao;
         this.temperaturaPrevista = temperaturaPrevista;
         this.precipitacaoPrevista = precipitacaoPrevista;
         this.umidadePrevista = umidadePrevista;
         this.riscoIncendio = riscoIncendio;
         this.riscoDengue = riscoDengue;
-        this.dataGeracao = LocalDateTime.now();
+        this.dataGeracao = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+    }
+
+    public void setMunicipio(String municipio) {
+        this.municipio = CityNameNormalizer.normalize(municipio);
     }
 }
