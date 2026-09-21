@@ -82,11 +82,18 @@ public class WeatherIngestionScheduler {
      * Executa uma coleta inicial ao iniciar a aplicação (após 15s de delay)
      * para garantir que dados estejam disponíveis imediatamente.
      */
+    @Value("${scheduler.enabled:false}")
+    private boolean schedulerEnabled;
+
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
+        if (!schedulerEnabled) {
+            log.info("⏸️ Sistema operando em modo 100% SOB DEMANDA. Coleta automática no startup desativada para economia de recursos.");
+            return;
+        }
         log.info("🚀 Aplicação iniciada! Agendando coleta inicial em 15 segundos...");
         try {
-            Thread.sleep(15_000); // Aguarda infraestrutura (Kafka, etc.) estar pronta
+            Thread.sleep(15_000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return;
@@ -109,8 +116,11 @@ public class WeatherIngestionScheduler {
      * </ol>
      * </p>
      */
-    @Scheduled(cron = "${scheduler.cron:0 0 * * * *}")
+    @Scheduled(cron = "${scheduler.cron:0 0 */3 * * *}")
     public void fetchAndPublishWeather() {
+        if (!schedulerEnabled) {
+            return;
+        }
         LocalDateTime inicio = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
         int successCount = 0;
         int failCount = 0;
