@@ -101,4 +101,16 @@ public class SchedulerStatusController {
 
         return ResponseEntity.accepted().body(response);
     }
+
+    @Operation(summary = "Disparar coleta sob demanda para uma cidade", description = "Coleta dados de clima, qualidade do ar e rios de uma cidade específica imediatamente.")
+    @PostMapping("/trigger/{city}")
+    public ResponseEntity<Map<String, Object>> triggerCity(@org.springframework.web.bind.annotation.PathVariable String city) {
+        log.info("🎯 Coleta sob demanda solicitada para a cidade: {}", city);
+        boolean success = scheduler.fetchAndPublishSingleCity(city);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("cidade", city);
+        response.put("sucesso", success);
+        response.put("mensagem", success ? "Coleta realizada com sucesso e publicada no fluxo" : "Não foi possível coletar dados para esta cidade");
+        return success ? ResponseEntity.ok(response) : ResponseEntity.badRequest().body(response);
+    }
 }

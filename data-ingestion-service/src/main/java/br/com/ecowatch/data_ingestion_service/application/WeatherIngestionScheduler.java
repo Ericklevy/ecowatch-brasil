@@ -211,4 +211,63 @@ public class WeatherIngestionScheduler {
         log.info("⏭️ Próxima execução: conforme cron configurado");
         log.info("═══════════════════════════════════════════════════════════════");
     }
+
+    /**
+     * Coleta dados sob demanda de uma única cidade e publica no Kafka.
+     * Usado quando o frontend solicita uma cidade que ainda não está no cache.
+     */
+    public boolean fetchAndPublishSingleCity(String city) {
+        String cityTrimmed = city.trim();
+        log.info("🎯 [ON-DEMAND] Coleta sob demanda solicitada para: {}", cityTrimmed);
+
+        WeatherReading reading = null;
+        String sourceUsed = "nenhuma";
+
+        // 1. Tenta fonte primária (NASA POWER)
+        try {
+            reading = primaryClient.fetchWeather(cityTrimmed);
+            if (reading != null) {
+                sourceUsed = primaryClient.getSourceName();
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ [ON-DEMAND] Falha no {}: {}", primaryClient.getSourceName(), e.getMessage());
+        }
+
+        // 2. Fallback (Open-Meteo)
+        if (reading == null) {
+            try {
+                reading = fallbackClient.fetchWeather(cityTrimmed);
+                if (reading != null) {
+                    sourceUsed = fallbackClient.getSourceName();
+                }
+            } catch (Exception e) {
+                log.error("❌ [ON-DEMAND] Falha no fallback: {}", e.getMessage());
+            }
+        }
+
+        if (reading != null) {
+            String municipioNormalizado = CityNameNormalizer.normalize(reading.municipio());
+            WeatherReading enriched = WeatherReading.builder()
+                    .municipio(municipioNormalizado)
+                    .estado(reading.estado())
+                    .temperatura(reading.temperatura())
+                    .umidade(reading.umidade())
+                    .precipitacao(reading.precipitacao())
+                    .timestamp(reading.timestamp())
+                    .pm25(0.0).pm10(0.0).focosIncendio(0).nivelRio(0.0).alertaEnxurrada(false)
+                    .build();
+
+            enriched = airQualityClient.enrichWithAirQuality(enriched);
+            enriched = inpeFireClient.enrichWithFireData(enriched);
+            enriched = cemadenClient.enrichWithFloodAlert(enriched);
+            enriched = anaRiverClient.enrichWithRiverLevel(enriched);
+
+            kafkaProducer.send(enriched);
+            log.info("✅ [ON-DEMAND] Cidade {} coletada e enviada via Kafka (fonte: {})", municipioNormalizado, sourceUsed);
+            return true;
+        }
+
+        log.warn("❌ [ON-DEMAND] Não foi possível obter dados para {}", cityTrimmed);
+        return false;
+    }
 }

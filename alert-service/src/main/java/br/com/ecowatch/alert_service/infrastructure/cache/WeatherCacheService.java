@@ -19,7 +19,7 @@ public class WeatherCacheService {
     private final ObjectMapper objectMapper;
 
     private static final String KEY_PREFIX = "weather:";
-    private static final Duration TTL = Duration.ofMinutes(5);
+    private static final Duration TTL = Duration.ofHours(3);
 
 
 
