@@ -74,4 +74,21 @@ public class DashboardService {
 
         return new DashboardDTO(normalizedQuery, alertas, previsoes);
     }
+
+    @Cacheable(value = "alerts-national", key = "'all'")
+    public List<AlertDTO> getLatestNationalAlerts() {
+        log.info("📊 Buscando últimos 50 alertas nacionais");
+
+        return alertRepository.findTop50ByOrderByDataHoraAlertaDesc()
+                .stream()
+                .map(alert -> new AlertDTO(
+                        alert.getId(),
+                        alert.getMunicipio(),
+                        alert.getEstado(),
+                        alert.getTipoAlerta(),
+                        alert.getMensagem(),
+                        alert.getDataHoraAlerta()
+                ))
+                .collect(Collectors.toList());
+    }
 }

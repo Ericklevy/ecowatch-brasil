@@ -1,5 +1,6 @@
 package br.com.ecowatch.read_model_service.infrastructure.api;
 
+import br.com.ecowatch.read_model_service.application.dto.AlertDTO;
 import br.com.ecowatch.read_model_service.application.dto.DashboardDTO;
 import br.com.ecowatch.read_model_service.application.service.DashboardService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @CrossOrigin(origins = "*")
 @RestController
@@ -34,5 +37,15 @@ public class DashboardController {
             @PathVariable String municipio) {
         var dashboard = dashboardService.getDashboard(municipio);
         return ResponseEntity.ok(dashboard);
+    }
+
+    @Operation(summary = "Listar alertas nacionais", description = "Retorna os últimos 50 alertas de todas as cidades monitoradas, ordenados do mais recente ao mais antigo. Ideal para a tabela de alertas globais e tela de relatórios.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Lista de alertas retornada com sucesso")
+    })
+    @GetMapping("/alerts/all")
+    public ResponseEntity<List<AlertDTO>> getAllAlerts() {
+        var alerts = dashboardService.getLatestNationalAlerts();
+        return ResponseEntity.ok(alerts);
     }
 }

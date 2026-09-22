@@ -11,4 +11,5 @@ public interface AlertRepository extends JpaRepository<AlertEntity, Long> {
     List<AlertEntity> findByMunicipioIgnoreCaseOrderByDataHoraAlertaDesc(String municipio);
     List<AlertEntity> findByMunicipioOrderByDataHoraAlertaDesc(String municipio);
     List<AlertEntity> findAllByOrderByDataHoraAlertaDesc();
+    List<AlertEntity> findTop50ByOrderByDataHoraAlertaDesc();
 }
