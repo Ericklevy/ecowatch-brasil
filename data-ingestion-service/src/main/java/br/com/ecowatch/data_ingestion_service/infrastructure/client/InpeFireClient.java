@@ -8,6 +8,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -33,13 +34,25 @@ public class InpeFireClient {
     private String inpeUrl;
 
     // Cidades ribeirinhas ou com histórico de queimadas frequentes e suas regiões de risco
-    private static final Map<String, String> REGIOES_RISCO = Map.of(
-            "Manaus",         "AM - Alta incidência histórica (Amazônia)",
-            "Cuiabá",         "MT - Alta incidência histórica (Cerrado/Pantanal)",
-            "Brasilia",       "DF - Risco sazonal (Cerrado)",
-            "Belo Horizonte", "MG - Risco moderado (Cerrado/Mata Atlântica)",
-            "Fortaleza",      "CE - Risco moderado (Caatinga)"
-    );
+    private static final Map<String, String> REGIOES_RISCO = new HashMap<>();
+
+    static {
+        REGIOES_RISCO.put("Manaus",         "AM - Alta incidência histórica (Amazônia)");
+        REGIOES_RISCO.put("Cuiaba",         "MT - Alta incidência histórica (Cerrado/Pantanal)");
+        REGIOES_RISCO.put("Brasilia",       "DF - Risco sazonal (Cerrado)");
+        REGIOES_RISCO.put("Belo Horizonte", "MG - Risco moderado (Cerrado/Mata Atlântica)");
+        REGIOES_RISCO.put("Fortaleza",      "CE - Risco moderado (Caatinga)");
+        // Novas capitais com biomas vulneráveis
+        REGIOES_RISCO.put("Goiania",        "GO - Alta incidência (Cerrado)");
+        REGIOES_RISCO.put("Palmas",         "TO - Alta incidência (Cerrado/Amazônia)");
+        REGIOES_RISCO.put("Porto Velho",    "RO - Alta incidência (Amazônia/arco do desmatamento)");
+        REGIOES_RISCO.put("Rio Branco",     "AC - Alta incidência (Amazônia)");
+        REGIOES_RISCO.put("Boa Vista",      "RR - Alta incidência (Lavrado/Amazônia)");
+        REGIOES_RISCO.put("Macapa",         "AP - Risco moderado (Amazônia)");
+        REGIOES_RISCO.put("Belem",          "PA - Risco moderado (Amazônia)");
+        REGIOES_RISCO.put("Campo Grande",   "MS - Alta incidência (Cerrado/Pantanal)");
+        REGIOES_RISCO.put("Teresina",       "PI - Risco moderado (Caatinga/Cerrado)");
+    }
 
     public InpeFireClient(
             @Value("${api.inpe.url:SIMULADO}") String inpeUrl) {

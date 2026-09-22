@@ -107,6 +107,23 @@ public class OpenMeteoClient implements WeatherClient {
             case "Belo Horizonte" -> "-19.9191,-43.9386";
             case "Fortaleza" -> "-3.7172,-38.5433";
             case "Manaus" -> "-3.1190,-60.0217";
+            case "Belem", "Belém" -> "-1.4558,-48.5024";
+            case "Goiania", "Goiânia" -> "-16.6869,-49.2648";
+            case "Sao Luis", "São Luís" -> "-2.5297,-44.2825";
+            case "Maceio", "Maceió" -> "-9.6658,-35.7353";
+            case "Teresina" -> "-5.0892,-42.8019";
+            case "Joao Pessoa", "João Pessoa" -> "-7.1195,-34.8450";
+            case "Natal" -> "-5.7945,-35.2110";
+            case "Aracaju" -> "-10.9091,-37.0677";
+            case "Campo Grande" -> "-20.4697,-54.6201";
+            case "Cuiaba", "Cuiabá" -> "-15.6014,-56.0979";
+            case "Florianopolis", "Florianópolis" -> "-27.5954,-48.5480";
+            case "Vitoria", "Vitória" -> "-20.3155,-40.3128";
+            case "Palmas" -> "-10.1689,-48.3317";
+            case "Macapa", "Macapá" -> "0.0349,-51.0694";
+            case "Boa Vista" -> "2.8195,-60.6714";
+            case "Rio Branco" -> "-9.9754,-67.8249";
+            case "Porto Velho" -> "-8.7612,-63.9004";
             default -> null;
         };
     }
@@ -123,6 +140,23 @@ public class OpenMeteoClient implements WeatherClient {
             case "Belo Horizonte" -> "MG";
             case "Fortaleza" -> "CE";
             case "Manaus" -> "AM";
+            case "Belem", "Belém" -> "PA";
+            case "Goiania", "Goiânia" -> "GO";
+            case "Sao Luis", "São Luís" -> "MA";
+            case "Maceio", "Maceió" -> "AL";
+            case "Teresina" -> "PI";
+            case "Joao Pessoa", "João Pessoa" -> "PB";
+            case "Natal" -> "RN";
+            case "Aracaju" -> "SE";
+            case "Campo Grande" -> "MS";
+            case "Cuiaba", "Cuiabá" -> "MT";
+            case "Florianopolis", "Florianópolis" -> "SC";
+            case "Vitoria", "Vitória" -> "ES";
+            case "Palmas" -> "TO";
+            case "Macapa", "Macapá" -> "AP";
+            case "Boa Vista" -> "RR";
+            case "Rio Branco" -> "AC";
+            case "Porto Velho" -> "RO";
             default -> "BR";
         };
     }

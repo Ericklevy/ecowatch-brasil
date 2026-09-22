@@ -33,7 +33,10 @@ public class CemadenClient {
     // Cidades com histórico de enxurradas e deslizamentos (CEMADEN / Defesa Civil)
     private static final Set<String> CIDADES_VULNERAVEIS_ENCHENTE = Set.of(
             "Rio de Janeiro", "Sao Paulo", "São Paulo", "Salvador",
-            "Belo Horizonte", "Recife", "Porto Alegre", "Curitiba"
+            "Belo Horizonte", "Recife", "Porto Alegre", "Curitiba",
+            "Belem", "Manaus", "Maceio", "Natal", "Vitoria",
+            "Florianopolis", "Sao Luis", "Goiania", "Teresina",
+            "Campo Grande", "Rio Branco", "Porto Velho"
     );
 
     public CemadenClient(

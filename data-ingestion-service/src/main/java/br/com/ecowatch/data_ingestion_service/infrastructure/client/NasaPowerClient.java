@@ -47,6 +47,33 @@ public class NasaPowerClient implements WeatherClient {
         COORDENADAS.put("Belo Horizonte", "-19.9191,-43.9386");
         COORDENADAS.put("Fortaleza", "-3.7172,-38.5433");
         COORDENADAS.put("Manaus", "-3.1190,-60.0217");
+        // 17 novas capitais
+        COORDENADAS.put("Belem", "-1.4558,-48.5024");
+        COORDENADAS.put("Belém", "-1.4558,-48.5024");
+        COORDENADAS.put("Goiania", "-16.6869,-49.2648");
+        COORDENADAS.put("Goiânia", "-16.6869,-49.2648");
+        COORDENADAS.put("Sao Luis", "-2.5297,-44.2825");
+        COORDENADAS.put("São Luís", "-2.5297,-44.2825");
+        COORDENADAS.put("Maceio", "-9.6658,-35.7353");
+        COORDENADAS.put("Maceió", "-9.6658,-35.7353");
+        COORDENADAS.put("Teresina", "-5.0892,-42.8019");
+        COORDENADAS.put("Joao Pessoa", "-7.1195,-34.8450");
+        COORDENADAS.put("João Pessoa", "-7.1195,-34.8450");
+        COORDENADAS.put("Natal", "-5.7945,-35.2110");
+        COORDENADAS.put("Aracaju", "-10.9091,-37.0677");
+        COORDENADAS.put("Campo Grande", "-20.4697,-54.6201");
+        COORDENADAS.put("Cuiaba", "-15.6014,-56.0979");
+        COORDENADAS.put("Cuiabá", "-15.6014,-56.0979");
+        COORDENADAS.put("Florianopolis", "-27.5954,-48.5480");
+        COORDENADAS.put("Florianópolis", "-27.5954,-48.5480");
+        COORDENADAS.put("Vitoria", "-20.3155,-40.3128");
+        COORDENADAS.put("Vitória", "-20.3155,-40.3128");
+        COORDENADAS.put("Palmas", "-10.1689,-48.3317");
+        COORDENADAS.put("Macapa", "0.0349,-51.0694");
+        COORDENADAS.put("Macapá", "0.0349,-51.0694");
+        COORDENADAS.put("Boa Vista", "2.8195,-60.6714");
+        COORDENADAS.put("Rio Branco", "-9.9754,-67.8249");
+        COORDENADAS.put("Porto Velho", "-8.7612,-63.9004");
     }
 
     // Comunidade: AG = Agricultura (recomendado para dados climáticos gerais)
@@ -158,6 +185,23 @@ public class NasaPowerClient implements WeatherClient {
             case "Belo Horizonte" -> "MG";
             case "Fortaleza" -> "CE";
             case "Manaus" -> "AM";
+            case "Belem", "Belém" -> "PA";
+            case "Goiania", "Goiânia" -> "GO";
+            case "Sao Luis", "São Luís" -> "MA";
+            case "Maceio", "Maceió" -> "AL";
+            case "Teresina" -> "PI";
+            case "Joao Pessoa", "João Pessoa" -> "PB";
+            case "Natal" -> "RN";
+            case "Aracaju" -> "SE";
+            case "Campo Grande" -> "MS";
+            case "Cuiaba", "Cuiabá" -> "MT";
+            case "Florianopolis", "Florianópolis" -> "SC";
+            case "Vitoria", "Vitória" -> "ES";
+            case "Palmas" -> "TO";
+            case "Macapa", "Macapá" -> "AP";
+            case "Boa Vista" -> "RR";
+            case "Rio Branco" -> "AC";
+            case "Porto Velho" -> "RO";
             default -> "BR";
         };
     }

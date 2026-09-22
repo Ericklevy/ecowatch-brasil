@@ -10,6 +10,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -33,18 +34,38 @@ public class OpenMeteoAirQualityClient {
     private final ObjectMapper objectMapper;
 
     // Mapa de cidades → coordenadas (deve ser mantido em sincronia com os outros clients)
-    private static final Map<String, double[]> COORDENADAS = Map.of(
-            "Brasilia",       new double[]{-15.7939, -47.8828},
-            "Rio de Janeiro", new double[]{-22.9028, -43.2075},
-            "Sao Paulo",      new double[]{-23.5475, -46.6361},
-            "Salvador",       new double[]{-12.9722, -38.5014},
-            "Recife",         new double[]{-8.0476,  -34.8770},
-            "Porto Alegre",   new double[]{-30.0346, -51.2177},
-            "Curitiba",       new double[]{-25.4284, -49.2733},
-            "Belo Horizonte", new double[]{-19.9191, -43.9386},
-            "Fortaleza",      new double[]{-3.7172,  -38.5433},
-            "Manaus",         new double[]{-3.1190,  -60.0217}
-    );
+    private static final Map<String, double[]> COORDENADAS = new HashMap<>();
+
+    static {
+        COORDENADAS.put("Brasilia",       new double[]{-15.7939, -47.8828});
+        COORDENADAS.put("Rio de Janeiro", new double[]{-22.9028, -43.2075});
+        COORDENADAS.put("Sao Paulo",      new double[]{-23.5475, -46.6361});
+        COORDENADAS.put("Salvador",       new double[]{-12.9722, -38.5014});
+        COORDENADAS.put("Recife",         new double[]{-8.0476,  -34.8770});
+        COORDENADAS.put("Porto Alegre",   new double[]{-30.0346, -51.2177});
+        COORDENADAS.put("Curitiba",       new double[]{-25.4284, -49.2733});
+        COORDENADAS.put("Belo Horizonte", new double[]{-19.9191, -43.9386});
+        COORDENADAS.put("Fortaleza",      new double[]{-3.7172,  -38.5433});
+        COORDENADAS.put("Manaus",         new double[]{-3.1190,  -60.0217});
+        // 17 novas capitais
+        COORDENADAS.put("Belem",          new double[]{-1.4558,  -48.5024});
+        COORDENADAS.put("Goiania",        new double[]{-16.6869, -49.2648});
+        COORDENADAS.put("Sao Luis",       new double[]{-2.5297,  -44.2825});
+        COORDENADAS.put("Maceio",         new double[]{-9.6658,  -35.7353});
+        COORDENADAS.put("Teresina",       new double[]{-5.0892,  -42.8019});
+        COORDENADAS.put("Joao Pessoa",    new double[]{-7.1195,  -34.8450});
+        COORDENADAS.put("Natal",          new double[]{-5.7945,  -35.2110});
+        COORDENADAS.put("Aracaju",        new double[]{-10.9091, -37.0677});
+        COORDENADAS.put("Campo Grande",   new double[]{-20.4697, -54.6201});
+        COORDENADAS.put("Cuiaba",         new double[]{-15.6014, -56.0979});
+        COORDENADAS.put("Florianopolis",  new double[]{-27.5954, -48.5480});
+        COORDENADAS.put("Vitoria",        new double[]{-20.3155, -40.3128});
+        COORDENADAS.put("Palmas",         new double[]{-10.1689, -48.3317});
+        COORDENADAS.put("Macapa",         new double[]{0.0349,   -51.0694});
+        COORDENADAS.put("Boa Vista",      new double[]{2.8195,   -60.6714});
+        COORDENADAS.put("Rio Branco",     new double[]{-9.9754,  -67.8249});
+        COORDENADAS.put("Porto Velho",    new double[]{-8.7612,  -63.9004});
+    }
 
     public OpenMeteoAirQualityClient(
             ObjectMapper objectMapper,

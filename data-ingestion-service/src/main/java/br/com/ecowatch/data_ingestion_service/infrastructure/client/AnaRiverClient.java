@@ -8,6 +8,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -38,13 +39,25 @@ public class AnaRiverClient {
     private final WebClient webClient;
 
     // Cidades com monitoramento de nível de rio relevante → cota de alerta (metros)
-    private static final Map<String, Double> COTAS_ALERTA = Map.of(
-            "Manaus",       28.0,  // Rio Negro
-            "Porto Alegre", 2.0,   // Lago Guaíba
-            "Recife",       3.5,   // Rio Capibaribe
-            "Fortaleza",    2.0,   // Rio Cocó
-            "Salvador",     1.5    // Rio das Tripas
-    );
+    private static final Map<String, Double> COTAS_ALERTA = new HashMap<>();
+
+    static {
+        COTAS_ALERTA.put("Manaus",       28.0);  // Rio Negro
+        COTAS_ALERTA.put("Porto Alegre", 2.0);   // Lago Guaíba
+        COTAS_ALERTA.put("Recife",       3.5);   // Rio Capibaribe
+        COTAS_ALERTA.put("Fortaleza",    2.0);   // Rio Cocó
+        COTAS_ALERTA.put("Salvador",     1.5);   // Rio das Tripas
+        // Novas capitais com rios monitoráveis
+        COTAS_ALERTA.put("Belem",        4.0);   // Rio Guamá / Baía do Guajará
+        COTAS_ALERTA.put("Sao Luis",     2.5);   // Rio Anil
+        COTAS_ALERTA.put("Teresina",     8.0);   // Rio Parnaíba
+        COTAS_ALERTA.put("Porto Velho",  14.0);  // Rio Madeira
+        COTAS_ALERTA.put("Rio Branco",   14.0);  // Rio Acre
+        COTAS_ALERTA.put("Macapa",       3.5);   // Rio Amazonas (foz)
+        COTAS_ALERTA.put("Cuiaba",       5.0);   // Rio Cuiabá
+        COTAS_ALERTA.put("Campo Grande", 3.0);   // Córrego Prosa / Segredo
+        COTAS_ALERTA.put("Boa Vista",    6.0);   // Rio Branco (RR)
+    }
 
     public AnaRiverClient(
             @Value("${api.ana.url:SIMULADO}") String anaUrl) {
@@ -118,6 +131,15 @@ public class AnaRiverClient {
             case "Porto Alegre" -> { cotaBase = 0.8;  fatorPrecipitacao = 0.05; }
             case "Recife"       -> { cotaBase = 1.2;  fatorPrecipitacao = 0.04; }
             case "Fortaleza"    -> { cotaBase = 0.5;  fatorPrecipitacao = 0.03; }
+            case "Belem"        -> { cotaBase = 2.0;  fatorPrecipitacao = 0.06; }
+            case "Teresina"     -> { cotaBase = 4.0;  fatorPrecipitacao = 0.10; }
+            case "Porto Velho"  -> { cotaBase = 8.0;  fatorPrecipitacao = 0.12; }
+            case "Rio Branco"   -> { cotaBase = 8.0;  fatorPrecipitacao = 0.12; }
+            case "Macapa"       -> { cotaBase = 1.5;  fatorPrecipitacao = 0.05; }
+            case "Cuiaba"       -> { cotaBase = 2.5;  fatorPrecipitacao = 0.06; }
+            case "Campo Grande" -> { cotaBase = 1.0;  fatorPrecipitacao = 0.04; }
+            case "Boa Vista"    -> { cotaBase = 3.0;  fatorPrecipitacao = 0.08; }
+            case "Sao Luis"     -> { cotaBase = 1.0;  fatorPrecipitacao = 0.04; }
             default             -> { cotaBase = 0.5;  fatorPrecipitacao = 0.02; }
         }
 

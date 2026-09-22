@@ -137,15 +137,34 @@ O backend é responsável exclusivamente por:
 | Mensageria (Queue) | RabbitMQ (Container App) | Brazil South |
 | Container Registry | Azure Container Registry | Brazil South |
 
-## Cidades Monitoradas
+## Capitais Monitoradas (27)
 
-1. Brasília (DF)
-2. Rio de Janeiro (RJ)
-3. São Paulo (SP)
-4. Salvador (BA)
-5. Recife (PE)
-6. Porto Alegre (RS)
-7. Curitiba (PR)
-8. Belo Horizonte (MG)
-9. Fortaleza (CE)
-10. Manaus (AM)
+| # | Capital | UF | Região |
+|---|---------|----|----|
+| 1 | Brasília | DF | Centro-Oeste |
+| 2 | Rio de Janeiro | RJ | Sudeste |
+| 3 | São Paulo | SP | Sudeste |
+| 4 | Salvador | BA | Nordeste |
+| 5 | Recife | PE | Nordeste |
+| 6 | Porto Alegre | RS | Sul |
+| 7 | Curitiba | PR | Sul |
+| 8 | Belo Horizonte | MG | Sudeste |
+| 9 | Fortaleza | CE | Nordeste |
+| 10 | Manaus | AM | Norte |
+| 11 | Belém | PA | Norte |
+| 12 | Goiânia | GO | Centro-Oeste |
+| 13 | São Luís | MA | Nordeste |
+| 14 | Maceió | AL | Nordeste |
+| 15 | Teresina | PI | Nordeste |
+| 16 | João Pessoa | PB | Nordeste |
+| 17 | Natal | RN | Nordeste |
+| 18 | Aracaju | SE | Nordeste |
+| 19 | Campo Grande | MS | Centro-Oeste |
+| 20 | Cuiabá | MT | Centro-Oeste |
+| 21 | Florianópolis | SC | Sul |
+| 22 | Vitória | ES | Sudeste |
+| 23 | Palmas | TO | Norte |
+| 24 | Macapá | AP | Norte |
+| 25 | Boa Vista | RR | Norte |
+| 26 | Rio Branco | AC | Norte |
+| 27 | Porto Velho | RO | Norte |
