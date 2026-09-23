@@ -117,10 +117,14 @@ public class WeatherIngestionScheduler {
      * </p>
      */
     @Scheduled(cron = "${scheduler.cron:0 0 */3 * * *}")
-    public void fetchAndPublishWeather() {
+    public void scheduledCron() {
         if (!schedulerEnabled) {
             return;
         }
+        fetchAndPublishWeather();
+    }
+
+    public void fetchAndPublishWeather() {
         LocalDateTime inicio = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
         int successCount = 0;
         int failCount = 0;
