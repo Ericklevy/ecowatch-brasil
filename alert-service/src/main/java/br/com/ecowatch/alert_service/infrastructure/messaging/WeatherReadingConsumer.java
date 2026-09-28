@@ -33,7 +33,7 @@ public class WeatherReadingConsumer {
     private final WeatherCacheService cacheService;
     private final RabbitTemplate rabbitTemplate;
 
-    @KafkaListener(topics = "weather-readings", groupId = "alert-group")
+    @KafkaListener(topics = "weather-readings", groupId = "${spring.kafka.consumer.group-id:$Default}")
     public void consume(String message) {
         try {
             WeatherReading rawReading = objectMapper.readValue(message, WeatherReading.class);
