@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.util.retry.Retry;
 
+import br.com.ecowatch.data_ingestion_service.util.CityNameNormalizer;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -86,6 +87,15 @@ public class OpenMeteoAirQualityClient {
     public WeatherReading enrichWithAirQuality(WeatherReading reading) {
         String city = reading.municipio();
         double[] coords = COORDENADAS.get(city.trim());
+        if (coords == null) {
+            String norm = CityNameNormalizer.normalize(city);
+            for (Map.Entry<String, double[]> entry : COORDENADAS.entrySet()) {
+                if (CityNameNormalizer.normalize(entry.getKey()).equalsIgnoreCase(norm)) {
+                    coords = entry.getValue();
+                    break;
+                }
+            }
+        }
 
         if (coords == null) {
             log.warn("⚠️ [AirQuality] Coordenadas não encontradas para: {}", city);

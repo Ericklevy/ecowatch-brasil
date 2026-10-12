@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.util.retry.Retry;
 
+import br.com.ecowatch.data_ingestion_service.util.CityNameNormalizer;
 import java.time.Duration;
 import java.util.Set;
 
@@ -32,11 +33,10 @@ public class CemadenClient {
 
     // Cidades com histórico de enxurradas e deslizamentos (CEMADEN / Defesa Civil)
     private static final Set<String> CIDADES_VULNERAVEIS_ENCHENTE = Set.of(
-            "Rio de Janeiro", "Sao Paulo", "São Paulo", "Salvador",
-            "Belo Horizonte", "Recife", "Porto Alegre", "Curitiba",
-            "Belem", "Manaus", "Maceio", "Natal", "Vitoria",
-            "Florianopolis", "Sao Luis", "Goiania", "Teresina",
-            "Campo Grande", "Rio Branco", "Porto Velho"
+            "rio de janeiro", "sao paulo", "salvador", "belo horizonte",
+            "recife", "porto alegre", "curitiba", "belem", "manaus",
+            "maceio", "natal", "vitoria", "florianopolis", "sao luis",
+            "goiania", "teresina", "campo grande", "rio branco", "porto velho"
     );
 
     public CemadenClient(
@@ -94,7 +94,9 @@ public class CemadenClient {
      * Sinal de umidade baixa como proxy de solo seco — padrão identificado pelo CEMADEN.
      */
     private boolean estimarAlertaClimaticamente(WeatherReading r) {
-        boolean cidadeVulneravel = CIDADES_VULNERAVEIS_ENCHENTE.contains(r.municipio());
+        String cityNormalized = CityNameNormalizer.normalize(r.municipio());
+        boolean cidadeVulneravel = CIDADES_VULNERAVEIS_ENCHENTE.contains(cityNormalized)
+                || CIDADES_VULNERAVEIS_ENCHENTE.contains(r.municipio().toLowerCase());
         boolean chuvaIntensa = r.precipitacao() >= 25.0;
         // Paradoxo: umidade do AR alta + precipitação alta após período seco = risco máximo
         boolean condicaoCritica = chuvaIntensa && r.umidade() > 85.0;

@@ -28,14 +28,17 @@ public class ForestFirePolicy implements AlertPolicy {
         boolean umidadeCritica  = reading.umidade() <= UMIDADE_CRITICA;
         boolean temperaturAlta  = reading.temperatura() >= TEMPERATURA_ALTA;
 
-        if (temFocos && (umidadeCritica || temperaturAlta)) {
+        if (temFocos) {
+            String condicao = (umidadeCritica || temperaturAlta)
+                    ? "condições EXTREMAS de propagação do fogo"
+                    : "risco de propagação de chamas";
             String msg = String.format(
                     "🔥 INCÊNDIO FLORESTAL em %s/%s: %d foco(s) de calor detectado(s) pelo INPE. " +
-                    "Temperatura de %.1f°C com %.1f%% de umidade — condições EXTREMAS de propagação do fogo. " +
-                    "Mantenha-se afastado de matas e areas de vegetação. " +
+                    "Temperatura de %.1f°C com %.1f%% de umidade — %s. " +
+                    "Mantenha-se afastado de matas e áreas de vegetação. " +
                     "Ligue 193 (Bombeiros) ao avistar fumaça.",
                     reading.municipio(), reading.estado(),
-                    reading.focosIncendio(), reading.temperatura(), reading.umidade());
+                    reading.focosIncendio(), reading.temperatura(), reading.umidade(), condicao);
 
             return new AlertResult(
                     true, AlertType.FOREST_FIRE,

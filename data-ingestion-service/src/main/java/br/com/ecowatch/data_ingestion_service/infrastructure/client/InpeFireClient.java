@@ -7,9 +7,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.util.retry.Retry;
 
+import br.com.ecowatch.data_ingestion_service.util.CityNameNormalizer;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Client para a API do INPE / BDQueimadas (Banco de Dados de Queimadas).
@@ -33,25 +35,36 @@ public class InpeFireClient {
     @Value("${api.inpe.url:SIMULADO}")
     private String inpeUrl;
 
+    // Capitais situadas no bioma Amazônia (onde umidade entre 40% e 70% já sustenta focos críticos)
+    private static final Set<String> BIOMA_AMAZONIA = Set.of(
+            "manaus", "portovelho", "porto velho", "riobranco", "rio branco",
+            "boavista", "boa vista", "macapa", "belem"
+    );
+
     // Cidades ribeirinhas ou com histórico de queimadas frequentes e suas regiões de risco
     private static final Map<String, String> REGIOES_RISCO = new HashMap<>();
 
     static {
-        REGIOES_RISCO.put("Manaus",         "AM - Alta incidência histórica (Amazônia)");
-        REGIOES_RISCO.put("Cuiaba",         "MT - Alta incidência histórica (Cerrado/Pantanal)");
-        REGIOES_RISCO.put("Brasilia",       "DF - Risco sazonal (Cerrado)");
-        REGIOES_RISCO.put("Belo Horizonte", "MG - Risco moderado (Cerrado/Mata Atlântica)");
-        REGIOES_RISCO.put("Fortaleza",      "CE - Risco moderado (Caatinga)");
-        // Novas capitais com biomas vulneráveis
-        REGIOES_RISCO.put("Goiania",        "GO - Alta incidência (Cerrado)");
-        REGIOES_RISCO.put("Palmas",         "TO - Alta incidência (Cerrado/Amazônia)");
-        REGIOES_RISCO.put("Porto Velho",    "RO - Alta incidência (Amazônia/arco do desmatamento)");
-        REGIOES_RISCO.put("Rio Branco",     "AC - Alta incidência (Amazônia)");
-        REGIOES_RISCO.put("Boa Vista",      "RR - Alta incidência (Lavrado/Amazônia)");
-        REGIOES_RISCO.put("Macapa",         "AP - Risco moderado (Amazônia)");
-        REGIOES_RISCO.put("Belem",          "PA - Risco moderado (Amazônia)");
-        REGIOES_RISCO.put("Campo Grande",   "MS - Alta incidência (Cerrado/Pantanal)");
-        REGIOES_RISCO.put("Teresina",       "PI - Risco moderado (Caatinga/Cerrado)");
+        adicionarRegiao("Manaus",         "AM - Alta incidência histórica (Amazônia)");
+        adicionarRegiao("Cuiaba",         "MT - Alta incidência histórica (Cerrado/Pantanal)");
+        adicionarRegiao("Brasilia",       "DF - Risco sazonal (Cerrado)");
+        adicionarRegiao("Belo Horizonte", "MG - Risco moderado (Cerrado/Mata Atlântica)");
+        adicionarRegiao("Fortaleza",      "CE - Risco moderado (Caatinga)");
+        adicionarRegiao("Goiania",        "GO - Alta incidência (Cerrado)");
+        adicionarRegiao("Palmas",         "TO - Alta incidência (Cerrado/Amazônia)");
+        adicionarRegiao("Porto Velho",    "RO - Alta incidência (Amazônia/arco do desmatamento)");
+        adicionarRegiao("Rio Branco",     "AC - Alta incidência (Amazônia)");
+        adicionarRegiao("Boa Vista",      "RR - Alta incidência (Lavrado/Amazônia)");
+        adicionarRegiao("Macapa",         "AP - Risco moderado (Amazônia)");
+        adicionarRegiao("Belem",          "PA - Risco moderado (Amazônia)");
+        adicionarRegiao("Campo Grande",   "MS - Alta incidência (Cerrado/Pantanal)");
+        adicionarRegiao("Teresina",       "PI - Risco moderado (Caatinga/Cerrado)");
+    }
+
+    private static void adicionarRegiao(String cidade, String descricao) {
+        REGIOES_RISCO.put(cidade, descricao);
+        REGIOES_RISCO.put(CityNameNormalizer.normalize(cidade), descricao);
+        REGIOES_RISCO.put(cidade.toLowerCase(), descricao);
     }
 
     public InpeFireClient(
@@ -106,18 +119,38 @@ public class InpeFireClient {
     }
 
     /**
-     * Estimativa de focos baseada em condições climáticas desfavoráveis.
-     * Lógica: temperatura alta + umidade crítica + precipitação zero + região de risco = risco elevado.
+     * Estimativa de focos baseada em condições climáticas desfavoráveis e bioma.
+     * Na Amazônia: calor >= 30.5°C + sem chuva (< 2mm) com umidade até 70% já sustenta focos severos.
+     * No Cerrado/Caatinga/Pantanal: calor >= 30.0°C + umidade <= 35% + sem chuva (< 2mm).
      */
     private int estimarFocosClimaticamente(WeatherReading r) {
-        boolean regiaoDeRisco = REGIOES_RISCO.containsKey(r.municipio());
-        boolean climaDeRisco  = r.temperatura() > 32.0 && r.umidade() < 30.0 && r.precipitacao() < 1.0;
+        String cityNormalized = CityNameNormalizer.normalize(r.municipio());
+        boolean regiaoDeRisco = REGIOES_RISCO.containsKey(cityNormalized) || REGIOES_RISCO.containsKey(r.municipio());
+        if (!regiaoDeRisco) {
+            return 0;
+        }
 
-        if (regiaoDeRisco && climaDeRisco) {
-            // Escala proporcional à severidade (mais quente + mais seco = mais focos estimados)
-            int estimativa = (int) ((r.temperatura() - 32) * 2 + (30 - r.umidade()));
-            log.info("⚠️ [INPE] Estimativa por clima para {}: ~{} focos", r.municipio(), estimativa);
-            return Math.max(1, estimativa);
+        boolean isAmazonia = BIOMA_AMAZONIA.contains(cityNormalized);
+        boolean semChuva = r.precipitacao() < 2.0;
+
+        if (isAmazonia) {
+            // Amazônia: altas temperaturas combinadas com estiagem geram focos mesmo com umidade entre 45% e 70%
+            if (semChuva && r.temperatura() >= 30.5 && r.umidade() <= 70.0) {
+                int estimativa = (int) Math.round((r.temperatura() - 30.0) * 3.0 + (70.0 - r.umidade()) * 0.4);
+                estimativa = Math.max(3, Math.min(65, estimativa));
+                log.info("🔥 [INPE-Amazônia] Estimativa de queimadas para {}: ~{} focos de calor (temp: {}°C, umid: {}%)",
+                        r.municipio(), estimativa, r.temperatura(), r.umidade());
+                return estimativa;
+            }
+        } else {
+            // Cerrado, Pantanal, Caatinga: calor intenso e baixa umidade relativa
+            if (semChuva && r.temperatura() >= 30.0 && r.umidade() <= 35.0) {
+                int estimativa = (int) Math.round((r.temperatura() - 30.0) * 2.5 + (35.0 - r.umidade()) * 0.8);
+                estimativa = Math.max(2, Math.min(80, estimativa));
+                log.info("🔥 [INPE-Cerrado/Outros] Estimativa de queimadas para {}: ~{} focos de calor",
+                        r.municipio(), estimativa);
+                return estimativa;
+            }
         }
         return 0;
     }
