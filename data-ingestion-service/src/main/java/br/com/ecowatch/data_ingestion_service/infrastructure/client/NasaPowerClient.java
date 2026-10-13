@@ -3,6 +3,7 @@ package br.com.ecowatch.data_ingestion_service.infrastructure.client;
 import br.com.ecowatch.data_ingestion_service.application.MetricsService;
 import br.com.ecowatch.data_ingestion_service.domain.client.WeatherClient;
 import br.com.ecowatch.data_ingestion_service.domain.model.WeatherReading;
+import br.com.ecowatch.data_ingestion_service.util.CityNameNormalizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -99,6 +100,9 @@ public class NasaPowerClient implements WeatherClient {
 
         String coords = COORDENADAS.get(city.trim());
         if (coords == null) {
+            coords = COORDENADAS.get(CityNameNormalizer.normalize(city));
+        }
+        if (coords == null) {
             log.warn("⚠️ Coordenadas não encontradas para: {}", city);
             return null;
         }
@@ -174,34 +178,35 @@ public class NasaPowerClient implements WeatherClient {
     }
 
     private String obterEstado(String city) {
-        return switch (city.trim()) {
-            case "Brasilia", "Brasília" -> "DF";
-            case "Rio de Janeiro" -> "RJ";
-            case "Sao Paulo", "São Paulo" -> "SP";
-            case "Salvador" -> "BA";
-            case "Recife" -> "PE";
-            case "Porto Alegre" -> "RS";
-            case "Curitiba" -> "PR";
-            case "Belo Horizonte" -> "MG";
-            case "Fortaleza" -> "CE";
-            case "Manaus" -> "AM";
-            case "Belem", "Belém" -> "PA";
-            case "Goiania", "Goiânia" -> "GO";
-            case "Sao Luis", "São Luís" -> "MA";
-            case "Maceio", "Maceió" -> "AL";
-            case "Teresina" -> "PI";
-            case "Joao Pessoa", "João Pessoa" -> "PB";
-            case "Natal" -> "RN";
-            case "Aracaju" -> "SE";
-            case "Campo Grande" -> "MS";
-            case "Cuiaba", "Cuiabá" -> "MT";
-            case "Florianopolis", "Florianópolis" -> "SC";
-            case "Vitoria", "Vitória" -> "ES";
-            case "Palmas" -> "TO";
-            case "Macapa", "Macapá" -> "AP";
-            case "Boa Vista" -> "RR";
-            case "Rio Branco" -> "AC";
-            case "Porto Velho" -> "RO";
+        String mun = CityNameNormalizer.normalize(city);
+        return switch (mun) {
+            case "brasilia" -> "DF";
+            case "rio de janeiro" -> "RJ";
+            case "sao paulo" -> "SP";
+            case "salvador" -> "BA";
+            case "recife" -> "PE";
+            case "porto alegre" -> "RS";
+            case "curitiba" -> "PR";
+            case "belo horizonte" -> "MG";
+            case "fortaleza" -> "CE";
+            case "manaus" -> "AM";
+            case "belem" -> "PA";
+            case "goiania" -> "GO";
+            case "sao luis" -> "MA";
+            case "maceio" -> "AL";
+            case "teresina" -> "PI";
+            case "joao pessoa" -> "PB";
+            case "natal" -> "RN";
+            case "aracaju" -> "SE";
+            case "campo grande" -> "MS";
+            case "cuiaba" -> "MT";
+            case "florianopolis" -> "SC";
+            case "vitoria" -> "ES";
+            case "palmas" -> "TO";
+            case "macapa" -> "AP";
+            case "boa vista" -> "RR";
+            case "rio branco" -> "AC";
+            case "porto velho" -> "RO";
             default -> "BR";
         };
     }

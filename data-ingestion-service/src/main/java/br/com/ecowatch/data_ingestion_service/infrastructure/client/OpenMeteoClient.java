@@ -2,6 +2,7 @@ package br.com.ecowatch.data_ingestion_service.infrastructure.client;
 
 import br.com.ecowatch.data_ingestion_service.domain.client.WeatherClient;
 import br.com.ecowatch.data_ingestion_service.domain.model.WeatherReading;
+import br.com.ecowatch.data_ingestion_service.util.CityNameNormalizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -96,67 +97,69 @@ public class OpenMeteoClient implements WeatherClient {
     }
 
     private String getLatLon(String city) {
-        return switch (city.trim()) {
-            case "Brasilia", "Brasília" -> "-15.7939,-47.8828";
-            case "Rio de Janeiro" -> "-22.9028,-43.2075";
-            case "Sao Paulo", "São Paulo" -> "-23.5475,-46.6361";
-            case "Salvador" -> "-12.9722,-38.5014";
-            case "Recife" -> "-8.0476,-34.8770";
-            case "Porto Alegre" -> "-30.0346,-51.2177";
-            case "Curitiba" -> "-25.4284,-49.2733";
-            case "Belo Horizonte" -> "-19.9191,-43.9386";
-            case "Fortaleza" -> "-3.7172,-38.5433";
-            case "Manaus" -> "-3.1190,-60.0217";
-            case "Belem", "Belém" -> "-1.4558,-48.5024";
-            case "Goiania", "Goiânia" -> "-16.6869,-49.2648";
-            case "Sao Luis", "São Luís" -> "-2.5297,-44.2825";
-            case "Maceio", "Maceió" -> "-9.6658,-35.7353";
-            case "Teresina" -> "-5.0892,-42.8019";
-            case "Joao Pessoa", "João Pessoa" -> "-7.1195,-34.8450";
-            case "Natal" -> "-5.7945,-35.2110";
-            case "Aracaju" -> "-10.9091,-37.0677";
-            case "Campo Grande" -> "-20.4697,-54.6201";
-            case "Cuiaba", "Cuiabá" -> "-15.6014,-56.0979";
-            case "Florianopolis", "Florianópolis" -> "-27.5954,-48.5480";
-            case "Vitoria", "Vitória" -> "-20.3155,-40.3128";
-            case "Palmas" -> "-10.1689,-48.3317";
-            case "Macapa", "Macapá" -> "0.0349,-51.0694";
-            case "Boa Vista" -> "2.8195,-60.6714";
-            case "Rio Branco" -> "-9.9754,-67.8249";
-            case "Porto Velho" -> "-8.7612,-63.9004";
+        String mun = CityNameNormalizer.normalize(city);
+        return switch (mun) {
+            case "brasilia" -> "-15.7939,-47.8828";
+            case "rio de janeiro" -> "-22.9028,-43.2075";
+            case "sao paulo" -> "-23.5475,-46.6361";
+            case "salvador" -> "-12.9722,-38.5014";
+            case "recife" -> "-8.0476,-34.8770";
+            case "porto alegre" -> "-30.0346,-51.2177";
+            case "curitiba" -> "-25.4284,-49.2733";
+            case "belo horizonte" -> "-19.9191,-43.9386";
+            case "fortaleza" -> "-3.7172,-38.5433";
+            case "manaus" -> "-3.1190,-60.0217";
+            case "belem" -> "-1.4558,-48.5024";
+            case "goiania" -> "-16.6869,-49.2648";
+            case "sao luis" -> "-2.5297,-44.2825";
+            case "maceio" -> "-9.6658,-35.7353";
+            case "teresina" -> "-5.0892,-42.8019";
+            case "joao pessoa" -> "-7.1195,-34.8450";
+            case "natal" -> "-5.7945,-35.2110";
+            case "aracaju" -> "-10.9091,-37.0677";
+            case "campo grande" -> "-20.4697,-54.6201";
+            case "cuiaba" -> "-15.6014,-56.0979";
+            case "florianopolis" -> "-27.5954,-48.5480";
+            case "vitoria" -> "-20.3155,-40.3128";
+            case "palmas" -> "-10.1689,-48.3317";
+            case "macapa" -> "0.0349,-51.0694";
+            case "boa vista" -> "2.8195,-60.6714";
+            case "rio branco" -> "-9.9754,-67.8249";
+            case "porto velho" -> "-8.7612,-63.9004";
             default -> null;
         };
     }
 
     private String obterEstado(String city) {
-        return switch (city.trim()) {
-            case "Brasilia", "Brasília" -> "DF";
-            case "Rio de Janeiro" -> "RJ";
-            case "Sao Paulo", "São Paulo" -> "SP";
-            case "Salvador" -> "BA";
-            case "Recife" -> "PE";
-            case "Porto Alegre" -> "RS";
-            case "Curitiba" -> "PR";
-            case "Belo Horizonte" -> "MG";
-            case "Fortaleza" -> "CE";
-            case "Manaus" -> "AM";
-            case "Belem", "Belém" -> "PA";
-            case "Goiania", "Goiânia" -> "GO";
-            case "Sao Luis", "São Luís" -> "MA";
-            case "Maceio", "Maceió" -> "AL";
-            case "Teresina" -> "PI";
-            case "Joao Pessoa", "João Pessoa" -> "PB";
-            case "Natal" -> "RN";
-            case "Aracaju" -> "SE";
-            case "Campo Grande" -> "MS";
-            case "Cuiaba", "Cuiabá" -> "MT";
-            case "Florianopolis", "Florianópolis" -> "SC";
-            case "Vitoria", "Vitória" -> "ES";
-            case "Palmas" -> "TO";
-            case "Macapa", "Macapá" -> "AP";
-            case "Boa Vista" -> "RR";
-            case "Rio Branco" -> "AC";
-            case "Porto Velho" -> "RO";
+        String mun = CityNameNormalizer.normalize(city);
+        return switch (mun) {
+            case "brasilia" -> "DF";
+            case "rio de janeiro" -> "RJ";
+            case "sao paulo" -> "SP";
+            case "salvador" -> "BA";
+            case "recife" -> "PE";
+            case "porto alegre" -> "RS";
+            case "curitiba" -> "PR";
+            case "belo horizonte" -> "MG";
+            case "fortaleza" -> "CE";
+            case "manaus" -> "AM";
+            case "belem" -> "PA";
+            case "goiania" -> "GO";
+            case "sao luis" -> "MA";
+            case "maceio" -> "AL";
+            case "teresina" -> "PI";
+            case "joao pessoa" -> "PB";
+            case "natal" -> "RN";
+            case "aracaju" -> "SE";
+            case "campo grande" -> "MS";
+            case "cuiaba" -> "MT";
+            case "florianopolis" -> "SC";
+            case "vitoria" -> "ES";
+            case "palmas" -> "TO";
+            case "macapa" -> "AP";
+            case "boa vista" -> "RR";
+            case "rio branco" -> "AC";
+            case "porto velho" -> "RO";
             default -> "BR";
         };
     }

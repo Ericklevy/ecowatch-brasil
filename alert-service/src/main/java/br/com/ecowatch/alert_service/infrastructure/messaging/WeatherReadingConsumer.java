@@ -39,19 +39,15 @@ public class WeatherReadingConsumer {
             WeatherReading rawReading = objectMapper.readValue(message, WeatherReading.class);
             String municipioNormalizado = CityNameNormalizer.normalize(rawReading.municipio());
             
-            WeatherReading reading = WeatherReading.builder()
+            WeatherReading reading = rawReading.toBuilder()
                     .municipio(municipioNormalizado)
-                    .estado(rawReading.estado())
-                    .temperatura(rawReading.temperatura())
-                    .umidade(rawReading.umidade())
-                    .precipitacao(rawReading.precipitacao())
-                    .timestamp(rawReading.timestamp())
                     .build();
 
-            log.info("📡 Nova leitura recebida de {}: {}°C", reading.municipio(), reading.temperatura());
+            log.info("📡 Nova leitura recebida de {}: {}°C, {} focos de calor, nível rio: {}m",
+                    reading.municipio(), reading.temperatura(), reading.focosIncendio(), reading.nivelRio());
 
             // 1. Salva a previsão na tabela 'previsoes'
-            int riscoIncendio = (reading.temperatura() > 30 && reading.umidade() < 30) ? 80 : 20;
+            int riscoIncendio = (reading.focosIncendio() > 0 || (reading.temperatura() > 30 && reading.umidade() < 35)) ? 80 : 20;
             int riscoDengue = (reading.umidade() > 70 && reading.temperatura() > 25) ? 75 : 15;
             LocalDate dataPrevisao = reading.timestamp() != null ? reading.timestamp().toLocalDate() : LocalDate.now();
 
@@ -85,15 +81,19 @@ public class WeatherReadingConsumer {
                     );
                     alertRepository.save(entity);
 
-                    // Publica no RabbitMQ (JSON)
-                    rabbitTemplate.convertAndSend(
-                            RabbitMQConfig.ALERT_EXCHANGE,
-                            "alert." + alerta.type().name().toLowerCase(),
-                            alerta
-                    );
-                    log.info("📨 Alerta publicado no RabbitMQ: {}", alerta.type());
+                    // Publica no RabbitMQ (se disponível)
+                    try {
+                        rabbitTemplate.convertAndSend(
+                                RabbitMQConfig.ALERT_EXCHANGE,
+                                "alert." + alerta.type().name().toLowerCase(),
+                                alerta
+                        );
+                        log.info("📨 Alerta publicado no RabbitMQ: {}", alerta.type());
+                    } catch (Exception ex) {
+                        log.warn("⚠️ RabbitMQ indisponível, alerta mantido no banco: {}", ex.getMessage());
+                    }
                 }
-                log.info("💾 Alertas salvos no banco e publicados no RabbitMQ!");
+                log.info("💾 Alertas salvos no banco!");
             } else {
                 log.info("✅ Clima normal. Nenhum alerta gerado.");
             }

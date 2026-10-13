@@ -134,18 +134,18 @@ public class InpeFireClient {
         boolean semChuva = r.precipitacao() < 2.0;
 
         if (isAmazonia) {
-            // Amazônia: altas temperaturas combinadas com estiagem geram focos mesmo com umidade entre 45% e 70%
-            if (semChuva && r.temperatura() >= 30.5 && r.umidade() <= 70.0) {
-                int estimativa = (int) Math.round((r.temperatura() - 30.0) * 3.0 + (70.0 - r.umidade()) * 0.4);
-                estimativa = Math.max(3, Math.min(65, estimativa));
+            // Amazônia: calor diário persistente combinado com estiagem sustenta focos críticos
+            if (semChuva && r.temperatura() >= 27.5 && r.umidade() <= 80.0) {
+                int estimativa = (int) Math.round((r.temperatura() - 27.0) * 3.5 + (80.0 - r.umidade()) * 0.5);
+                estimativa = Math.max(3, Math.min(85, estimativa));
                 log.info("🔥 [INPE-Amazônia] Estimativa de queimadas para {}: ~{} focos de calor (temp: {}°C, umid: {}%)",
                         r.municipio(), estimativa, r.temperatura(), r.umidade());
                 return estimativa;
             }
         } else {
-            // Cerrado, Pantanal, Caatinga: calor intenso e baixa umidade relativa
-            if (semChuva && r.temperatura() >= 30.0 && r.umidade() <= 35.0) {
-                int estimativa = (int) Math.round((r.temperatura() - 30.0) * 2.5 + (35.0 - r.umidade()) * 0.8);
+            // Cerrado, Pantanal, Caatinga: calor e estiagem
+            if (semChuva && r.temperatura() >= 28.0 && r.umidade() <= 45.0) {
+                int estimativa = (int) Math.round((r.temperatura() - 28.0) * 2.5 + (45.0 - r.umidade()) * 0.8);
                 estimativa = Math.max(2, Math.min(80, estimativa));
                 log.info("🔥 [INPE-Cerrado/Outros] Estimativa de queimadas para {}: ~{} focos de calor",
                         r.municipio(), estimativa);
