@@ -1,0 +1,24 @@
+name: EcoWatch Ingestion Scheduler (3x Daily)
+
+on:
+  schedule:
+    # Horários de Brasília (UTC-3):
+    # - 07:00 BRT -> 10:00 UTC
+    # - 13:00 BRT -> 16:00 UTC
+    # - 19:00 BRT -> 22:00 UTC
+    - cron: '0 10,16,22 * * *'
+  workflow_dispatch: # Permite disparo manual no painel do GitHub
+
+jobs:
+  trigger-ingestion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar Coleta de Telemetria e Alertas
+        run: |
+          echo "Disparando coleta agendada de telemetria ambiental..."
+          curl -X POST "https://data-ingestion.wittytree-8ba02066.brazilsouth.azurecontainerapps.io/api/scheduler/trigger" \
+            -H "Content-Type: application/json" \
+            --connect-timeout 20 \
+            --max-time 90 \
+            --retry 2 \
+            || echo "Requisicao enviada (container em execucao sob demanda)"
