@@ -21,6 +21,7 @@ public class AlertEntity {
     private String municipio;
     private String estado;
     private String tipoAlerta;
+    @Column(columnDefinition = "TEXT")
     private String mensagem;
     private LocalDateTime dataHoraAlerta;
 }

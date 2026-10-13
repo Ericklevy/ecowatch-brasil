@@ -75,7 +75,6 @@ public class DashboardService {
         return new DashboardDTO(normalizedQuery, alertas, previsoes);
     }
 
-    @Cacheable(value = "alerts-national", key = "'all'")
     public List<AlertDTO> getLatestNationalAlerts() {
         log.info("📊 Buscando últimos 50 alertas nacionais");
 

@@ -72,14 +72,19 @@ public class WeatherReadingConsumer {
                     log.warn("   -> {}", alerta.message());
 
                     // Salva no banco
-                    AlertEntity entity = new AlertEntity(
-                            reading.municipio(),
-                            reading.estado(),
-                            alerta.type(),
-                            alerta.message(),
-                            reading.timestamp()
-                    );
-                    alertRepository.save(entity);
+                    try {
+                        AlertEntity entity = new AlertEntity(
+                                reading.municipio(),
+                                reading.estado(),
+                                alerta.type(),
+                                alerta.message(),
+                                reading.timestamp()
+                        );
+                        alertRepository.save(entity);
+                        log.info("✅ Alerta '{}' salvo no banco para {}", alerta.type(), reading.municipio());
+                    } catch (Exception ex) {
+                        log.error("❌ Erro ao salvar alerta '{}' no banco: {}", alerta.type(), ex.getMessage());
+                    }
 
                     // Publica no RabbitMQ (se disponível)
                     try {

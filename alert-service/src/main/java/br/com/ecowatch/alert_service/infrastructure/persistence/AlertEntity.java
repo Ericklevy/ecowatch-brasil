@@ -27,6 +27,7 @@ public class AlertEntity {
     @Enumerated(EnumType.STRING)
     private AlertType tipoAlerta; // agora usa o enum
 
+    @Column(columnDefinition = "TEXT")
     private String mensagem;
     private LocalDateTime dataHoraLeitura; // timestamp da leitura original
     private LocalDateTime dataHoraAlerta;  // momento do processamento
