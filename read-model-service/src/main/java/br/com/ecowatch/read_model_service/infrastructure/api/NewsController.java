@@ -30,14 +30,14 @@ public class NewsController {
 
     @Operation(
             summary = "Listar notícias ambientais",
-            description = "Retorna notícias e comunicados oficiais de desastres ambientais (queimadas, enchentes, chuvas, dengue, secas) com paginação e filtros opcionais por categoria, estado e município."
+            description = "Retorna notícias e comunicados oficiais de desastres ambientais (queimadas, enchentes, chuvas, dengue, desmatamento, secas) com paginação e filtros opcionais por categoria, estado e município."
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Lista paginada de notícias retornada com sucesso")
     })
     @GetMapping
     public ResponseEntity<PageResponse<NewsDTO>> getNews(
-            @Parameter(description = "Categoria da notícia: FIRE, FLOOD, RAIN, DENGUE, GENERAL")
+            @Parameter(description = "Categoria da notícia: FIRE, FLOOD, RAIN, DENGUE, DEFORESTATION, GENERAL")
             @RequestParam(required = false) NewsCategory categoria,
             @Parameter(description = "Sigla do estado (UF de 2 letras, ex: SP, RS, DF)")
             @RequestParam(required = false) String estado,
@@ -69,6 +69,20 @@ public class NewsController {
         return ResponseEntity.ok(Map.of(
                 "status", "success",
                 "novasNoticiasImportadas", imported,
+                "timestamp", java.time.Instant.now().toString()
+        ));
+    }
+
+    @Operation(
+            summary = "Limpar matérias irrelevantes do banco",
+            description = "Varre o banco de dados e remove matérias que contenham termos de ruído (política, eleições, curiosidades) ou que não atendam às regras de desastres climáticos, reclassificando as remanescentes."
+    )
+    @PostMapping("/cleanup")
+    public ResponseEntity<Map<String, Object>> triggerCleanup() {
+        int purged = newsService.purgeIrrelevantNews();
+        return ResponseEntity.ok(Map.of(
+                "status", "success",
+                "noticiasIrrelevantesRemovidas", purged,
                 "timestamp", java.time.Instant.now().toString()
         ));
     }

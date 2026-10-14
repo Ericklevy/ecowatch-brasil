@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.zip.GZIPInputStream;
 
+import org.springframework.jdbc.core.JdbcTemplate;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -35,6 +37,7 @@ public class NewsIngestionService {
 
     private final NewsRepository newsRepository;
     private final NewsClassifier newsClassifier;
+    private final JdbcTemplate jdbcTemplate;
 
     public record FeedSource(String name, String url, boolean isEnvironmentalFeed) {}
 
@@ -61,12 +64,17 @@ public class NewsIngestionService {
     }
 
     /**
-     * Ao subir a aplicação, se o banco tiver poucas notícias, sincroniza em background.
+     * Ao subir a aplicação, purga notícias irrelevantes e sincroniza fontes se necessário.
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
         Thread.ofVirtual().start(() -> {
             try {
+                int purged = purgeIrrelevantExistingNews();
+                if (purged > 0) {
+                    log.info("Limpeza de inicialização: {} notícias irrelevantes removidas.", purged);
+                }
+
                 long count = newsRepository.count();
                 if (count < 5) {
                     log.info("Base de notícias vazia ou com poucas notícias ({}), iniciando carga inicial...", count);
@@ -74,9 +82,65 @@ public class NewsIngestionService {
                     log.info("Carga inicial concluída. Total importado: {}", imported);
                 }
             } catch (Exception e) {
-                log.warn("Falha não bloqueante na sincronização inicial de notícias: {}", e.getMessage());
+                log.warn("Falha não bloqueante na inicialização de notícias: {}", e.getMessage());
             }
         });
+    }
+
+    /**
+     * Purga matérias do banco que não atendem às regras estritas ou contêm ruído da blacklist.
+     */
+    public int purgeIrrelevantExistingNews() {
+        // 1. Remove a check constraint antiga do PostgreSQL para permitir DEFORESTATION e novas categorias
+        try {
+            jdbcTemplate.execute("ALTER TABLE noticias_ambientais DROP CONSTRAINT IF EXISTS noticias_ambientais_categoria_check");
+        } catch (Exception e) {
+            log.warn("Aviso ao remover constraint de categoria no banco: {}", e.getMessage());
+        }
+
+        // 2. Remoção direta via SQL de matérias de ruído político e trivialidades
+        int directPurged = 0;
+        try {
+            directPurged = jdbcTemplate.update(
+                    "DELETE FROM noticias_ambientais WHERE " +
+                    "LOWER(titulo) LIKE '%urna%' OR LOWER(titulo) LIKE '%eleiç%' OR " +
+                    "LOWER(titulo) LIKE '%2º turno%' OR LOWER(titulo) LIKE '%segundo turno%' OR " +
+                    "LOWER(titulo) LIKE '%candidat%' OR LOWER(titulo) LIKE '%stf%' OR " +
+                    "LOWER(titulo) LIKE '%marco temporal%' OR LOWER(titulo) LIKE '%lixo eletrônico%' OR " +
+                    "LOWER(titulo) LIKE '%florada do ipê%' OR LOWER(titulo) LIKE '%solzinho%' OR " +
+                    "LOWER(titulo) LIKE '%partido%'"
+            );
+            if (directPurged > 0) {
+                log.info("SQL direto removeu {} notícias de ruído político e trivialidades.", directPurged);
+            }
+        } catch (Exception e) {
+            log.warn("Aviso na limpeza direta por SQL: {}", e.getMessage());
+        }
+
+        // 3. Varredura semântica fina: remove matérias fora do domínio e reclassifica as válidas
+        var all = newsRepository.findAll();
+        var toDelete = new java.util.ArrayList<NewsEntity>();
+        var toUpdate = new java.util.ArrayList<NewsEntity>();
+
+        for (var news : all) {
+            var validCat = newsClassifier.classify(news.getTitulo(), news.getResumo(), false);
+            if (validCat.isEmpty()) {
+                toDelete.add(news);
+            } else if (news.getCategoria() != validCat.get()) {
+                news.setCategoria(validCat.get());
+                toUpdate.add(news);
+            }
+        }
+
+        if (!toDelete.isEmpty()) {
+            newsRepository.deleteAll(toDelete);
+            log.info("Removidas mais {} notícias pelo classificador semântico.", toDelete.size());
+        }
+        if (!toUpdate.isEmpty()) {
+            newsRepository.saveAll(toUpdate);
+            log.info("Reclassificadas {} notícias para categorias semânticas corretas.", toUpdate.size());
+        }
+        return directPurged + toDelete.size();
     }
 
     /**

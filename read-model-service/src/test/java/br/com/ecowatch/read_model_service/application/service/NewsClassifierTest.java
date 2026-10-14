@@ -19,6 +19,65 @@ class NewsClassifierTest {
     }
 
     @Test
+    @DisplayName("Deve rejeitar notícias sobre urnas e eleições (ruído político)")
+    void shouldRejectElectionsNoise() {
+        Optional<NewsCategory> cat = classifier.classify(
+                "Estado de SP começa a preparar mais de 114 mil urnas para o 2º turno",
+                "Mais de 114 mil urnas eletrônicas começaram a ser preparadas para o segundo turno das eleições.",
+                false
+        );
+        assertTrue(cat.isEmpty(), "Notícias sobre eleições e urnas devem ser sumariamente descartadas");
+    }
+
+    @Test
+    @DisplayName("Deve rejeitar notícias jurídicas sobre STF e Marco Temporal")
+    void shouldRejectJudicialPoliticsNoise() {
+        Optional<NewsCategory> cat = classifier.classify(
+                "STF retoma julgamento sobre o marco temporal indígena",
+                "Ministros do plenário votam sobre a tese com repercussão geral.",
+                true
+        );
+        assertTrue(cat.isEmpty(), "Notícias de plenário do STF e marco temporal devem ser descartadas");
+    }
+
+    @Test
+    @DisplayName("Deve rejeitar curiosidades e matérias de zoológico sem desastre ambiental")
+    void shouldRejectCuriosityNoise() {
+        Optional<NewsCategory> cat1 = classifier.classify(
+                "Florada do ipê encanta moradores na capital",
+                "Árvores florescem colorindo as avenidas da cidade nesta primavera.",
+                true
+        );
+        assertTrue(cat1.isEmpty());
+
+        Optional<NewsCategory> cat2 = classifier.classify(
+                "Onça-pintada tomando um solzinho em parque surpreende visitantes",
+                "Animal foi flagrado descansando em área protegida.",
+                true
+        );
+        assertTrue(cat2.isEmpty());
+
+        Optional<NewsCategory> cat3 = classifier.classify(
+                "Correios disponibilizam coleta para descarte de eletroeletrônicos",
+                "Agências recebem lixo eletrônico para reciclagem no dia do meio ambiente.",
+                true
+        );
+        assertTrue(cat3.isEmpty(), "Lixo eletrônico e trivialidades devem ser descartadas");
+    }
+
+    @Test
+    @DisplayName("Deve categorizar desmatamento e alertas do DETER/INPE como DEFORESTATION")
+    void shouldClassifyDeforestation() {
+        Optional<NewsCategory> cat = classifier.classify(
+                "DETER/INPE aponta redução na taxa de desmatamento da Amazônia",
+                "Operações contra o corte raso e pressão agropecuária sobre a floresta avançam.",
+                true
+        );
+        assertTrue(cat.isPresent());
+        assertEquals(NewsCategory.DEFORESTATION, cat.get());
+    }
+
+    @Test
     @DisplayName("Deve categorizar notícia sobre queimadas e incêndios como FIRE")
     void shouldClassifyFire() {
         Optional<NewsCategory> cat = classifier.classify(
@@ -67,7 +126,7 @@ class NewsClassifierTest {
     }
 
     @Test
-    @DisplayName("Deve categorizar seca e emergência climática como GENERAL")
+    @DisplayName("Deve categorizar seca e ar seco extremo como GENERAL")
     void shouldClassifyGeneral() {
         Optional<NewsCategory> cat = classifier.classify(
                 "Estiagem prolongada reduz reservatórios a níveis críticos",

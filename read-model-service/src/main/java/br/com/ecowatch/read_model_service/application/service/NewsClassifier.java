@@ -5,11 +5,12 @@ import org.springframework.stereotype.Component;
 
 import java.text.Normalizer;
 import java.util.*;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Classificador temático e extrator de localização e resumos de notícias ambientais.
+ * Aplica filtro sanitizador anti-ruído (rejeita política, eleições e trivialidades)
+ * e exige relevância semântica estrita para monitoramento de desastres climáticos.
  */
 @Component
 public class NewsClassifier {
@@ -18,6 +19,28 @@ public class NewsClassifier {
 
     private static final Map<String, String> STATE_BY_NAME = new LinkedHashMap<>();
     private static final Map<String, String> CAPITAL_TO_STATE = new LinkedHashMap<>();
+
+    // Termos de rejeição obrigatória (Blacklist de Ruído Político e Trivialidades)
+    private static final List<String> BLACKLIST_TERMS = List.of(
+            "urna", "urnas", "eleicao", "eleicoes", "2o turno", "2º turno", "segundo turno",
+            "candidato", "candidatos", "candidata", "partido", "partidos", "stf", "voto", "votos",
+            "votacao", "tse", "parlamentar", "deputado", "deputados", "senador", "senadores",
+            "plenario", "tribunal superior", "marco temporal", "lixo eletronico", "florada do ipe",
+            "tomando um solzinho", "tomando solzinho", "ninhos nunca vistos", "zoologico", "parque das aves",
+            "filhote de", "receita federal", "imposto de renda", "inflacao", "selic", "copom",
+            "bolsa familia", "futebol", "campeonato", "copa do brasil", "libertadores", "brasileirao"
+    );
+
+    // Palavras-chave obrigatórias do domínio (Whitelist de Relevância de Desastres/Clima)
+    private static final List<String> DOMAIN_WHITELIST = List.of(
+            "fogo", "queimada", "queimadas", "incendio", "incendios", "fumaca", "chamas",
+            "rio", "rios", "cheia", "cheias", "enchente", "enchentes", "cota", "cota de alerta",
+            "cota de inundacao", "vazante", "chuva", "chuvas", "tempestade", "tempestades",
+            "temporal", "temporais", "alagamento", "alagamentos", "enxurrada", "granizo",
+            "dengue", "aedes", "arbovirose", "chikungunya", "zika", "desmatamento", "desmatar",
+            "corte raso", "deter", "seca", "secas", "estiagem", "calor extremo", "ar seco",
+            "baixa umidade", "defesa civil", "cemaden", "inpe", "infodengue"
+    );
 
     static {
         STATE_BY_NAME.put("acre", "AC");
@@ -82,53 +105,97 @@ public class NewsClassifier {
     );
 
     /**
+     * Verifica se o texto contém algum termo proibido da Blacklist.
+     */
+    public boolean isBlacklisted(String text) {
+        if (text == null || text.isBlank()) return true;
+        for (String term : BLACKLIST_TERMS) {
+            if (Pattern.compile("\\b" + Pattern.quote(term) + "\\b").matcher(text).find() || text.contains(term)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Verifica se o texto atende à exigência mínima de conter palavras do domínio de desastres/clima.
+     */
+    public boolean hasDomainRelevance(String text) {
+        if (text == null || text.isBlank()) return false;
+        for (String term : DOMAIN_WHITELIST) {
+            if (Pattern.compile("\\b" + Pattern.quote(term) + "\\b").matcher(text).find() || text.contains(term)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Classifica a notícia com base no título e descrição.
-     * Retorna Optional.empty() se não for categorizada como desastre/clima.
+     * Rejeita ruído e retorna Optional.empty() se não atender às regras estritas.
      */
     public Optional<NewsCategory> classify(String title, String description, boolean isEnvironmentalFeed) {
-        String text = stripAccents((title + " " + (description != null ? description : "")).toLowerCase());
+        String rawCombined = (title != null ? title : "") + " " + (description != null ? description : "");
+        String text = stripAccents(rawCombined.toLowerCase());
 
-        // 1. DENGUE
+        // 1. Filtro Sanitizador de Ingestão: Descarte imediato de ruído político e trivialidades
+        if (isBlacklisted(text)) {
+            return Optional.empty();
+        }
+
+        // 2. Exigência de relevância de domínio (Whitelist)
+        if (!hasDomainRelevance(text)) {
+            return Optional.empty();
+        }
+
+        // 3. Classificação Semântica Estrita
+
+        // DENGUE
         if (text.contains("dengue") || text.contains("aedes") || text.contains("chikungunya") ||
-            text.contains("zika") || text.contains("fumace") || text.contains("arbovirose")) {
+            text.contains("zika") || text.contains("fumace") || text.contains("arbovirose") ||
+            text.contains("infodengue")) {
             return Optional.of(NewsCategory.DENGUE);
         }
 
-        // 2. FIRE (queimadas, incêndios)
+        // FIRE (fogo, queimada, incêndio, fumaça, chamas, INPE associado a calor)
         if (text.contains("queimada") || text.contains("incendio") || text.contains("foco de calor") ||
-            text.contains("fumaca") || text.contains("brigadista") || text.contains("pantanal em chamas") ||
-            text.contains("amazonia em chamas") || text.contains("combate ao fogo") || text.contains("inpe")) {
+            text.contains("focos de calor") || text.contains("fumaca") || text.contains("chamas") ||
+            text.contains("brigadista") || text.contains("pantanal em chamas") ||
+            text.contains("amazonia em chamas") || text.contains("combate ao fogo")) {
             return Optional.of(NewsCategory.FIRE);
         }
 
-        // 3. FLOOD (enchentes, inundações, deslizamentos)
+        // FLOOD (rio, rios, enchente, cheia, inundação, vazante, cota, Guaíba, Rio Negro)
         if (text.contains("enchente") || text.contains("inundacao") || text.contains("alagamento") ||
             text.contains("deslizamento") || text.contains("transbord") || text.contains("enxurrada") ||
             text.contains("cota de inundacao") || text.contains("cota de alerta") || text.contains("desabrigado") ||
-            text.contains("desabamento") || text.contains("dique") || text.contains("represa transborda")) {
+            text.contains("desabamento") || text.contains("dique") || text.contains("cheia do rio") ||
+            text.contains("cheias") || text.contains("vazante") || text.contains("rio guaiba") ||
+            text.contains("rio negro") || (text.contains("rio ") && (text.contains("sobe") || text.contains("atinge cota") || text.contains("transborda")))) {
             return Optional.of(NewsCategory.FLOOD);
         }
 
-        // 4. RAIN (chuvas fortes, tempestades, granizo)
+        // RAIN (chuva, tempestade, temporal, granizo, precipitação, CEMADEN)
         if (text.contains("chuva") || text.contains("temporal") || text.contains("tempestade") ||
             text.contains("granizo") || text.contains("tromba d'agua") || text.contains("precipitacao") ||
-            text.contains("ciclone") || text.contains("vendaval") || text.contains("alerta meteorologico") ||
-            text.contains("inmet")) {
+            text.contains("ciclone") || text.contains("vendaval") || text.contains("cemaden") ||
+            text.contains("alerta meteorologico")) {
             return Optional.of(NewsCategory.RAIN);
         }
 
-        // 5. GENERAL (secas, estiagens, calor extremo, defesa civil)
-        if (text.contains("seca") || text.contains("estiagem") || text.contains("onda de calor") ||
-            text.contains("calor extremo") || text.contains("temperatura recorde") || text.contains("crise hidrica") ||
-            text.contains("defesa civil") || text.contains("cemaden") || text.contains("desastre natural") ||
-            text.contains("emergencia climatica") || text.contains("aquecimento global")) {
-            return Optional.of(NewsCategory.GENERAL);
+        // DEFORESTATION (desmatamento, desmatar, pressão agropecuária, DETER, conservação florestal)
+        if (text.contains("desmatamento") || text.contains("desmatar") || text.contains("corte raso") ||
+            text.contains("deter") || text.contains("agropecuaria sobre floresta") ||
+            text.contains("pressao agropecuaria") || text.contains("conservacao florestal") ||
+            text.contains("taxa de desmatamento") || text.contains("perda de vegetacao")) {
+            return Optional.of(NewsCategory.DEFORESTATION);
         }
 
-        // Se o feed for temático ambiental e o texto trata de clima/natureza/biomas
-        if (isEnvironmentalFeed && (text.contains("clima") || text.contains("meio ambiente") ||
-                text.contains("floresta") || text.contains("amazonia") || text.contains("pantanal") ||
-                text.contains("cerrado") || text.contains("mata atlantica") || text.contains("ibama"))) {
+        // GENERAL (seca, estiagem, calor extremo, ar seco, baixa umidade)
+        if (text.contains("seca") || text.contains("estiagem") || text.contains("calor extremo") ||
+            text.contains("onda de calor") || text.contains("ar seco") || text.contains("baixa umidade") ||
+            text.contains("umidade relativa do ar") || text.contains("temperatura recorde") ||
+            text.contains("crise hidrica") || text.contains("defesa civil")) {
             return Optional.of(NewsCategory.GENERAL);
         }
 
@@ -139,7 +206,7 @@ public class NewsClassifier {
      * Extrai município e estado a partir do título e texto da matéria.
      */
     public LocationInfo extractLocation(String title, String description) {
-        String combinedOriginal = title + " " + (description != null ? description : "");
+        String combinedOriginal = (title != null ? title : "") + " " + (description != null ? description : "");
         String textNormalized = stripAccents(combinedOriginal.toLowerCase());
 
         String foundCity = null;
@@ -148,7 +215,7 @@ public class NewsClassifier {
         // 1. Procura por capitais
         for (Map.Entry<String, String> entry : CAPITAL_TO_STATE.entrySet()) {
             String capital = entry.getKey();
-            Pattern p = Pattern.compile("\\b" + capital + "\\b");
+            Pattern p = Pattern.compile("\\b" + Pattern.quote(capital) + "\\b");
             if (p.matcher(textNormalized).find()) {
                 foundCity = capitalizeProper(capital);
                 foundState = entry.getValue();
@@ -160,7 +227,7 @@ public class NewsClassifier {
         if (foundState == null) {
             for (Map.Entry<String, String> entry : STATE_BY_NAME.entrySet()) {
                 String stateName = entry.getKey();
-                Pattern p = Pattern.compile("\\b" + stateName + "\\b");
+                Pattern p = Pattern.compile("\\b" + Pattern.quote(stateName) + "\\b");
                 if (p.matcher(textNormalized).find()) {
                     foundState = entry.getValue();
                     if (foundCity == null && (stateName.equals("sao paulo") || stateName.equals("rio de janeiro"))) {
@@ -239,7 +306,7 @@ public class NewsClassifier {
                 .replace("&ccedil;", "ç");
     }
 
-    private String stripAccents(String s) {
+    public String stripAccents(String s) {
         if (s == null) return "";
         return Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
