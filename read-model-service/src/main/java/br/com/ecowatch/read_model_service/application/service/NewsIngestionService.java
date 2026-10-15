@@ -43,9 +43,7 @@ public class NewsIngestionService {
 
     private static final List<FeedSource> SOURCES = List.of(
             new FeedSource("Agência Brasil", "https://agenciabrasil.ebc.com.br/rss/meio-ambiente/feed.xml", true),
-            new FeedSource("G1 Meio Ambiente", "https://g1.globo.com/rss/g1/natureza/", true),
-            new FeedSource("Agência Brasil", "https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml", false),
-            new FeedSource("Agência Gov", "https://agenciagov.ebc.com.br/noticias/feed.xml", false)
+            new FeedSource("G1 Meio Ambiente", "https://g1.globo.com/rss/g1/natureza/", true)
     );
 
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -77,9 +75,9 @@ public class NewsIngestionService {
 
                 long count = newsRepository.count();
                 if (count < 5) {
-                    log.info("Base de notícias vazia ou com poucas notícias ({}), iniciando carga inicial...", count);
+                    log.info("Base de notícias com poucas notícias ({}), iniciando coleta inicial...", count);
                     int imported = syncAllSources();
-                    log.info("Carga inicial concluída. Total importado: {}", imported);
+                    log.info("Coleta concluída. Total importado: {}", imported);
                 }
             } catch (Exception e) {
                 log.warn("Falha não bloqueante na inicialização de notícias: {}", e.getMessage());
@@ -98,7 +96,7 @@ public class NewsIngestionService {
             log.warn("Aviso ao remover constraint de categoria no banco: {}", e.getMessage());
         }
 
-        // 2. Remoção direta via SQL de matérias de ruído político e trivialidades
+        // 2. Remoção direta via SQL de matérias de ruído político, economia geral e trivialidades
         int directPurged = 0;
         try {
             directPurged = jdbcTemplate.update(
@@ -108,7 +106,10 @@ public class NewsIngestionService {
                     "LOWER(titulo) LIKE '%candidat%' OR LOWER(titulo) LIKE '%stf%' OR " +
                     "LOWER(titulo) LIKE '%marco temporal%' OR LOWER(titulo) LIKE '%lixo eletrônico%' OR " +
                     "LOWER(titulo) LIKE '%florada do ipê%' OR LOWER(titulo) LIKE '%solzinho%' OR " +
-                    "LOWER(titulo) LIKE '%partido%'"
+                    "LOWER(titulo) LIKE '%partido%' OR LOWER(titulo) LIKE '%trump%' OR " +
+                    "LOWER(titulo) LIKE '%indústria%' OR LOWER(titulo) LIKE '%industria%' OR " +
+                    "LOWER(titulo) LIKE '%escritor%' OR LOWER(titulo) LIKE '%groenlândia%' OR " +
+                    "LOWER(titulo) LIKE '%groenlandia%' OR LOWER(titulo) LIKE '%europa negra%'"
             );
             if (directPurged > 0) {
                 log.info("SQL direto removeu {} notícias de ruído político e trivialidades.", directPurged);
@@ -117,18 +118,31 @@ public class NewsIngestionService {
             log.warn("Aviso na limpeza direta por SQL: {}", e.getMessage());
         }
 
-        // 3. Varredura semântica fina: remove matérias fora do domínio e reclassifica as válidas
+        // 3. Varredura semântica fina: remove matérias fora do domínio e reclassifica/re-localiza as válidas
         var all = newsRepository.findAll();
         var toDelete = new java.util.ArrayList<NewsEntity>();
         var toUpdate = new java.util.ArrayList<NewsEntity>();
 
         for (var news : all) {
-            var validCat = newsClassifier.classify(news.getTitulo(), news.getResumo(), false);
+            var validCat = newsClassifier.classify(news.getTitulo(), news.getResumo(), true);
             if (validCat.isEmpty()) {
                 toDelete.add(news);
-            } else if (news.getCategoria() != validCat.get()) {
-                news.setCategoria(validCat.get());
-                toUpdate.add(news);
+            } else {
+                boolean changed = false;
+                if (news.getCategoria() != validCat.get()) {
+                    news.setCategoria(validCat.get());
+                    changed = true;
+                }
+                var loc = newsClassifier.extractLocation(news.getTitulo(), news.getResumo());
+                if (!java.util.Objects.equals(news.getEstado(), loc.estado()) ||
+                    !java.util.Objects.equals(news.getMunicipio(), loc.municipio())) {
+                    news.setEstado(loc.estado());
+                    news.setMunicipio(loc.municipio());
+                    changed = true;
+                }
+                if (changed) {
+                    toUpdate.add(news);
+                }
             }
         }
 
@@ -138,7 +152,7 @@ public class NewsIngestionService {
         }
         if (!toUpdate.isEmpty()) {
             newsRepository.saveAll(toUpdate);
-            log.info("Reclassificadas {} notícias para categorias semânticas corretas.", toUpdate.size());
+            log.info("Reclassificadas/Re-localizadas {} notícias para categorias e locais corretos.", toUpdate.size());
         }
         return directPurged + toDelete.size();
     }

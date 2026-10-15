@@ -149,6 +149,47 @@ class NewsClassifierTest {
     }
 
     @Test
+    @DisplayName("Deve rejeitar notícias de economia geral, cultura e política internacional")
+    void shouldRejectGeneralEconomyCultureAndInternationalNoise() {
+        Optional<NewsCategory> cat1 = classifier.classify(
+                "Confiança da indústria sobe em outubro, mas setor segue pessimista",
+                "O Índice de Confiança do Empresário Industrial subiu 1,3 ponto em outubro, segundo pesquisa da CNI.",
+                false
+        );
+        assertTrue(cat1.isEmpty(), "Notícias de indústria/economia geral devem ser rejeitadas");
+
+        Optional<NewsCategory> cat2 = classifier.classify(
+                "Escritor Joaquim Arena preenche vazios de Europa negra invisibilizada",
+                "Revelar uma Europa negra, apagada das narrativas oficiais, é o que propõe o autor em seu livro.",
+                false
+        );
+        assertTrue(cat2.isEmpty(), "Notícias de cultura/livros devem ser rejeitadas");
+
+        Optional<NewsCategory> cat3 = classifier.classify(
+                "Trump anuncia exploração de petróleo e gás na Groenlândia",
+                "O presidente dos Estados Unidos afirmou que uma exploração em grande escala está prestes a começar.",
+                false
+        );
+        assertTrue(cat3.isEmpty(), "Notícias de política internacional/Trump devem ser rejeitadas");
+    }
+
+    @Test
+    @DisplayName("Não deve confundir a preposição 'para' com o Estado do Pará (PA)")
+    void shouldNotConfusePrepositionParaWithStatePara() {
+        NewsClassifier.LocationInfo loc1 = classifier.extractLocation(
+                "Tempestade se prepara para atingir o litoral",
+                "Nuvens escuras avançam para o interior."
+        );
+        assertNotEquals("PA", loc1.estado(), "A preposição 'para' não pode ser classificada como Estado do Pará");
+
+        NewsClassifier.LocationInfo loc2 = classifier.extractLocation(
+                "Focos de queimadas avançam no estado do Pará",
+                "Equipes combatem o fogo na floresta."
+        );
+        assertEquals("PA", loc2.estado(), "Deve identificar Pará quando precedido de 'estado do Pará' ou 'no Pará'");
+    }
+
+    @Test
     @DisplayName("Deve limpar tags HTML e criar resumo conciso em linguagem cidadã")
     void shouldCleanAndSummarize() {
         String html = "<p>A <strong>Defesa Civil</strong> emitiu novo alerta nesta manhã.&nbsp;O rio subiu rapidamente.</p>";

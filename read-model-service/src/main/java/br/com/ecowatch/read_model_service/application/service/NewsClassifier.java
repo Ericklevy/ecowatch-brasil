@@ -20,7 +20,7 @@ public class NewsClassifier {
     private static final Map<String, String> STATE_BY_NAME = new LinkedHashMap<>();
     private static final Map<String, String> CAPITAL_TO_STATE = new LinkedHashMap<>();
 
-    // Termos de rejeição obrigatória (Blacklist de Ruído Político e Trivialidades)
+    // Termos de rejeição obrigatória (Blacklist de Ruído Político, Economia Geral e Trivialidades)
     private static final List<String> BLACKLIST_TERMS = List.of(
             "urna", "urnas", "eleicao", "eleicoes", "2o turno", "2º turno", "segundo turno",
             "candidato", "candidatos", "candidata", "partido", "partidos", "stf", "voto", "votos",
@@ -28,7 +28,9 @@ public class NewsClassifier {
             "plenario", "tribunal superior", "marco temporal", "lixo eletronico", "florada do ipe",
             "tomando um solzinho", "tomando solzinho", "ninhos nunca vistos", "zoologico", "parque das aves",
             "filhote de", "receita federal", "imposto de renda", "inflacao", "selic", "copom",
-            "bolsa familia", "futebol", "campeonato", "copa do brasil", "libertadores", "brasileirao"
+            "bolsa familia", "futebol", "campeonato", "copa do brasil", "libertadores", "brasileirao",
+            "trump", "biden", "bolsa de valores", "mercado financeiro", "industria", "empresario",
+            "escritor", "livro", "premio", "cinema", "teatro", "show", "cultura", "novela", "serie", "filme"
     );
 
     // Palavras-chave obrigatórias do domínio (Whitelist de Relevância de Desastres/Clima)
@@ -56,7 +58,7 @@ public class NewsClassifier {
         STATE_BY_NAME.put("mato grosso do sul", "MS");
         STATE_BY_NAME.put("mato grosso", "MT");
         STATE_BY_NAME.put("minas gerais", "MG");
-        STATE_BY_NAME.put("para", "PA");
+        // Nota: "para" não entra direto aqui para não colidir com a preposição "para". É tratado separadamente.
         STATE_BY_NAME.put("paraiba", "PB");
         STATE_BY_NAME.put("parana", "PR");
         STATE_BY_NAME.put("pernambuco", "PE");
@@ -104,14 +106,21 @@ public class NewsClassifier {
             "RS", "RO", "RR", "SC", "SP", "SE", "TO"
     );
 
+    private boolean containsWord(String text, String word) {
+        if (text == null || word == null) return false;
+        return Pattern.compile("\\b" + Pattern.quote(word) + "\\b").matcher(text).find();
+    }
+
     /**
      * Verifica se o texto contém algum termo proibido da Blacklist.
      */
     public boolean isBlacklisted(String text) {
         if (text == null || text.isBlank()) return true;
         for (String term : BLACKLIST_TERMS) {
-            if (Pattern.compile("\\b" + Pattern.quote(term) + "\\b").matcher(text).find() || text.contains(term)) {
-                return true;
+            if (term.contains(" ")) {
+                if (text.contains(term)) return true;
+            } else {
+                if (containsWord(text, term)) return true;
             }
         }
         return false;
@@ -119,12 +128,16 @@ public class NewsClassifier {
 
     /**
      * Verifica se o texto atende à exigência mínima de conter palavras do domínio de desastres/clima.
+     * Palavras de uma letra ou curtas usam fronteira estrita de palavra para evitar falsos positivos
+     * (ex: 'rio' não dá match em 'empresário', 'relatório' ou 'cenário').
      */
     public boolean hasDomainRelevance(String text) {
         if (text == null || text.isBlank()) return false;
         for (String term : DOMAIN_WHITELIST) {
-            if (Pattern.compile("\\b" + Pattern.quote(term) + "\\b").matcher(text).find() || text.contains(term)) {
-                return true;
+            if (term.contains(" ")) {
+                if (text.contains(term)) return true;
+            } else {
+                if (containsWord(text, term)) return true;
             }
         }
         return false;
@@ -143,7 +156,7 @@ public class NewsClassifier {
             return Optional.empty();
         }
 
-        // 2. Exigência de relevância de domínio (Whitelist)
+        // 2. Exigência de relevância de domínio (Whitelist estrita)
         if (!hasDomainRelevance(text)) {
             return Optional.empty();
         }
@@ -151,51 +164,70 @@ public class NewsClassifier {
         // 3. Classificação Semântica Estrita
 
         // DENGUE
-        if (text.contains("dengue") || text.contains("aedes") || text.contains("chikungunya") ||
-            text.contains("zika") || text.contains("fumace") || text.contains("arbovirose") ||
-            text.contains("infodengue")) {
+        if (containsWord(text, "dengue") || containsWord(text, "aedes") || containsWord(text, "chikungunya") ||
+            containsWord(text, "zika") || containsWord(text, "fumace") || containsWord(text, "arbovirose") ||
+            containsWord(text, "infodengue")) {
             return Optional.of(NewsCategory.DENGUE);
         }
 
         // FIRE (fogo, queimada, incêndio, fumaça, chamas, INPE associado a calor)
-        if (text.contains("queimada") || text.contains("incendio") || text.contains("foco de calor") ||
-            text.contains("focos de calor") || text.contains("fumaca") || text.contains("chamas") ||
-            text.contains("brigadista") || text.contains("pantanal em chamas") ||
+        if (containsWord(text, "fogo") || containsWord(text, "queimada") || containsWord(text, "queimadas") ||
+            containsWord(text, "incendio") || containsWord(text, "incendios") || containsWord(text, "fumaca") ||
+            containsWord(text, "chamas") || containsWord(text, "brigadista") || containsWord(text, "brigadistas") ||
+            text.contains("foco de calor") || text.contains("focos de calor") || text.contains("pantanal em chamas") ||
             text.contains("amazonia em chamas") || text.contains("combate ao fogo")) {
             return Optional.of(NewsCategory.FIRE);
         }
 
         // FLOOD (rio, rios, enchente, cheia, inundação, vazante, cota, Guaíba, Rio Negro)
-        if (text.contains("enchente") || text.contains("inundacao") || text.contains("alagamento") ||
-            text.contains("deslizamento") || text.contains("transbord") || text.contains("enxurrada") ||
-            text.contains("cota de inundacao") || text.contains("cota de alerta") || text.contains("desabrigado") ||
-            text.contains("desabamento") || text.contains("dique") || text.contains("cheia do rio") ||
-            text.contains("cheias") || text.contains("vazante") || text.contains("rio guaiba") ||
-            text.contains("rio negro") || (text.contains("rio ") && (text.contains("sobe") || text.contains("atinge cota") || text.contains("transborda")))) {
+        boolean hasRiver = containsWord(text, "rio") || containsWord(text, "rios") ||
+                text.contains("rio guaiba") || text.contains("rio negro") || text.contains("rio amazonas") ||
+                text.contains("rio madeira") || text.contains("rio acre");
+        boolean hasRiverCondition = containsWord(text, "cheia") || containsWord(text, "cheias") ||
+                containsWord(text, "transborda") || containsWord(text, "transbordou") ||
+                containsWord(text, "vazante") || containsWord(text, "cota") ||
+                containsWord(text, "inundou") || containsWord(text, "subiu") ||
+                containsWord(text, "sobe") || containsWord(text, "alagou");
+
+        if (containsWord(text, "enchente") || containsWord(text, "enchentes") ||
+            containsWord(text, "inundacao") || containsWord(text, "inundacoes") ||
+            containsWord(text, "alagamento") || containsWord(text, "alagamentos") ||
+            containsWord(text, "deslizamento") || containsWord(text, "deslizamentos") ||
+            containsWord(text, "enxurrada") || containsWord(text, "enxurradas") ||
+            text.contains("cota de inundacao") || text.contains("cota de alerta") ||
+            text.contains("cheia do rio") || text.contains("cheia dos rios") ||
+            (hasRiver && hasRiverCondition)) {
             return Optional.of(NewsCategory.FLOOD);
         }
 
         // RAIN (chuva, tempestade, temporal, granizo, precipitação, CEMADEN)
-        if (text.contains("chuva") || text.contains("temporal") || text.contains("tempestade") ||
-            text.contains("granizo") || text.contains("tromba d'agua") || text.contains("precipitacao") ||
-            text.contains("ciclone") || text.contains("vendaval") || text.contains("cemaden") ||
+        if (containsWord(text, "chuva") || containsWord(text, "chuvas") ||
+            containsWord(text, "temporal") || containsWord(text, "temporais") ||
+            containsWord(text, "tempestade") || containsWord(text, "tempestades") ||
+            containsWord(text, "granizo") || containsWord(text, "precipitacao") ||
+            containsWord(text, "ciclone") || containsWord(text, "vendaval") ||
+            containsWord(text, "cemaden") || text.contains("tromba d'agua") ||
             text.contains("alerta meteorologico")) {
             return Optional.of(NewsCategory.RAIN);
         }
 
-        // DEFORESTATION (desmatamento, desmatar, pressão agropecuária, DETER, conservação florestal)
-        if (text.contains("desmatamento") || text.contains("desmatar") || text.contains("corte raso") ||
-            text.contains("deter") || text.contains("agropecuaria sobre floresta") ||
-            text.contains("pressao agropecuaria") || text.contains("conservacao florestal") ||
-            text.contains("taxa de desmatamento") || text.contains("perda de vegetacao")) {
+        // DEFORESTATION (desmatamento, desmatar, corte raso, DETER, conservação florestal)
+        if (containsWord(text, "desmatamento") || containsWord(text, "desmatar") ||
+            containsWord(text, "desmatada") || containsWord(text, "desmatadas") ||
+            containsWord(text, "deter") || text.contains("corte raso") ||
+            text.contains("agropecuaria sobre floresta") || text.contains("pressao agropecuaria") ||
+            text.contains("conservacao florestal") || text.contains("taxa de desmatamento") ||
+            text.contains("perda de vegetacao")) {
             return Optional.of(NewsCategory.DEFORESTATION);
         }
 
         // GENERAL (seca, estiagem, calor extremo, ar seco, baixa umidade)
-        if (text.contains("seca") || text.contains("estiagem") || text.contains("calor extremo") ||
-            text.contains("onda de calor") || text.contains("ar seco") || text.contains("baixa umidade") ||
-            text.contains("umidade relativa do ar") || text.contains("temperatura recorde") ||
-            text.contains("crise hidrica") || text.contains("defesa civil")) {
+        if (containsWord(text, "seca") || containsWord(text, "secas") ||
+            containsWord(text, "estiagem") || containsWord(text, "estiagens") ||
+            containsWord(text, "defesa civil") || text.contains("calor extremo") ||
+            text.contains("onda de calor") || text.contains("ar seco") ||
+            text.contains("baixa umidade") || text.contains("umidade relativa do ar") ||
+            text.contains("temperatura recorde") || text.contains("crise hidrica")) {
             return Optional.of(NewsCategory.GENERAL);
         }
 
@@ -235,6 +267,14 @@ public class NewsClassifier {
                     }
                     break;
                 }
+            }
+        }
+
+        // 2.1 Detecção específica para o Estado do Pará (evita colisão com a preposição "para")
+        if (foundState == null) {
+            if (Pattern.compile("\\b(estado do para|no para|do para|governo do para)\\b").matcher(textNormalized).find()
+                || Pattern.compile("\\bPará\\b").matcher(combinedOriginal).find()) {
+                foundState = "PA";
             }
         }
 
