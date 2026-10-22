@@ -2,7 +2,6 @@ package br.com.ecowatch.read_model_service.infrastructure.security;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-import io.github.bucket4j.Refill;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,8 +31,10 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
 
     private Bucket createNewBucket() {
-        Refill refill = Refill.greedy(CAPACITY, REFILL_DURATION);
-        Bandwidth limit = Bandwidth.classic(CAPACITY, refill);
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(CAPACITY)
+                .refillGreedy(CAPACITY, REFILL_DURATION)
+                .build();
         return Bucket.builder().addLimit(limit).build();
     }
 
