@@ -31,12 +31,6 @@ public class DashboardService {
 
         // Busca alertas por município padronizado
         var alertEntities = alertRepository.findByMunicipioIgnoreCaseOrderByDataHoraAlertaDesc(normalizedQuery);
-        if (alertEntities.isEmpty()) {
-            alertEntities = alertRepository.findAllByOrderByDataHoraAlertaDesc()
-                    .stream()
-                    .filter(a -> CityNameNormalizer.normalize(a.getMunicipio()).equals(normalizedQuery))
-                    .collect(Collectors.toList());
-        }
 
         var alertas = alertEntities.stream()
                 .limit(10)
@@ -52,12 +46,6 @@ public class DashboardService {
 
         // Previsões para os próximos 3 dias
         var previsaoEntities = previsaoRepository.findByMunicipioIgnoreCaseAndDataPrevisaoAfterOrderByDataPrevisaoAsc(normalizedQuery, LocalDate.now().minusDays(1));
-        if (previsaoEntities.isEmpty()) {
-            previsaoEntities = previsaoRepository.findByDataPrevisaoAfterOrderByDataPrevisaoAsc(LocalDate.now().minusDays(1))
-                    .stream()
-                    .filter(p -> CityNameNormalizer.normalize(p.getMunicipio()).equals(normalizedQuery))
-                    .collect(Collectors.toList());
-        }
 
         var previsoes = previsaoEntities.stream()
                 .limit(3)

@@ -12,4 +12,6 @@ public interface PrevisaoRepository extends JpaRepository<PrevisaoEntity, Long> 
     List<PrevisaoEntity> findByMunicipioAndDataPrevisaoAfter(String municipio, LocalDate data);
 
     List<PrevisaoEntity> findByMunicipioOrderByDataPrevisaoDesc(String municipio);
+
+    List<PrevisaoEntity> findByMunicipioInAndDataPrevisaoIn(java.util.Collection<String> municipios, java.util.Collection<LocalDate> datas);
 }
