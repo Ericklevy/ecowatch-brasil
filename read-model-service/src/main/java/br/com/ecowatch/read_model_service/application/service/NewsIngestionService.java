@@ -24,6 +24,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Optional;
 import java.util.zip.GZIPInputStream;
@@ -213,6 +217,23 @@ public class NewsIngestionService {
 
             NodeList items = doc.getElementsByTagName("item");
 
+            List<NewsEntity> toSave = new ArrayList<>();
+            List<String> canonicalUrls = new ArrayList<>();
+
+            for (int i = 0; i < items.getLength(); i++) {
+                Element item = (Element) items.item(i);
+                String link = getTagValue(item, "link");
+                String guid = getTagValue(item, "guid");
+                String canonicalUrl = (link != null && !link.isBlank()) ? link.trim() : (guid != null ? guid.trim() : "");
+                if (!canonicalUrl.isBlank()) {
+                    canonicalUrls.add(canonicalUrl);
+                }
+            }
+
+            List<String> existingUrls = newsRepository.findByUrlIn(canonicalUrls).stream()
+                    .map(NewsEntity::getUrl)
+                    .collect(Collectors.toList());
+
             for (int i = 0; i < items.getLength(); i++) {
                 Element item = (Element) items.item(i);
 
@@ -228,7 +249,7 @@ public class NewsIngestionService {
                 }
 
                 // Evita duplicatas pela URL
-                if (newsRepository.existsByUrl(canonicalUrl)) {
+                if (existingUrls.contains(canonicalUrl)) {
                     continue;
                 }
 
@@ -254,8 +275,12 @@ public class NewsIngestionService {
                         .dataCriacao(Instant.now())
                         .build();
 
-                newsRepository.save(newsEntity);
-                importedCount++;
+                toSave.add(newsEntity);
+            }
+
+            if (!toSave.isEmpty()) {
+                newsRepository.saveAll(toSave);
+                importedCount += toSave.size();
             }
 
         } catch (Exception e) {

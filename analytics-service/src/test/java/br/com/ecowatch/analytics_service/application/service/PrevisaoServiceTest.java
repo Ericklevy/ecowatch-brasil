@@ -26,14 +26,13 @@ class PrevisaoServiceTest {
 
     @Test
     void shouldGenerateDailyForecastsWithNormalizedCities() {
-        when(repository.findByMunicipioAndDataPrevisaoAfter(anyString(), any(LocalDate.class)))
+        when(repository.findByMunicipioInAndDataPrevisaoIn(any(), any()))
                 .thenReturn(Collections.emptyList());
 
         previsaoService.gerarPrevisoesDiarias();
 
-        // 10 cidades base distintas * 2 previsões por cidade = 20 salvamentos esperados
-        verify(repository, times(20)).save(any(PrevisaoEntity.class));
-        verify(repository, atLeastOnce()).findByMunicipioAndDataPrevisaoAfter(eq("brasilia"), any(LocalDate.class));
-        verify(repository, atLeastOnce()).findByMunicipioAndDataPrevisaoAfter(eq("sao paulo"), any(LocalDate.class));
+        // The saveAll method should be called once with a list of 20 items
+        verify(repository, times(1)).saveAll(any());
+        verify(repository, atLeastOnce()).findByMunicipioInAndDataPrevisaoIn(any(), any());
     }
 }

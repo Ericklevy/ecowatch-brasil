@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
@@ -41,23 +42,39 @@ public class PrevisaoService {
                 .distinct()
                 .collect(Collectors.toList());
 
+        List<PrevisaoEntity> todasExistentes = repository.findByMunicipioInAndDataPrevisaoIn(
+                cidadesPadronizadas,
+                List.of(amanha, depois)
+        );
+        List<PrevisaoEntity> novasPrevisoes = new ArrayList<>();
+
         for (String cidade : cidadesPadronizadas) {
-            // Gera previsões para amanhã e depois de amanhã
-            gerarPrevisaoPara(cidade, amanha);
-            gerarPrevisaoPara(cidade, depois);
+            novasPrevisoes.addAll(gerarPrevisaoPara(cidade, amanha, todasExistentes));
+            novasPrevisoes.addAll(gerarPrevisaoPara(cidade, depois, todasExistentes));
+        }
+
+        if (!novasPrevisoes.isEmpty()) {
+            repository.saveAll(novasPrevisoes);
+            for (PrevisaoEntity entity : novasPrevisoes) {
+                log.info("📊 Previsão gerada e salva no lote para {} em {}: temp={}°C, precip={}mm, umidade={}%",
+                        entity.getMunicipio(), entity.getDataPrevisao(), entity.getTemperaturaPrevista(),
+                        entity.getPrecipitacaoPrevista(), entity.getUmidadePrevista());
+            }
         }
 
         log.info("✅ Previsões geradas para {} cidades", cidadesPadronizadas.size());
     }
 
-    private void gerarPrevisaoPara(String municipio, LocalDate data) {
+    private List<PrevisaoEntity> gerarPrevisaoPara(String municipio, LocalDate data, List<PrevisaoEntity> todasExistentes) {
         String municipioNormalizado = CityNameNormalizer.normalize(municipio);
 
         // Verifica se já existe previsão para essa data (evita duplicidade)
-        var existentes = repository.findByMunicipioAndDataPrevisaoAfter(municipioNormalizado, data.minusDays(1));
-        if (existentes.stream().anyMatch(p -> p.getDataPrevisao().equals(data))) {
+        boolean jaExiste = todasExistentes.stream()
+                .anyMatch(p -> p.getMunicipio().equals(municipioNormalizado) && p.getDataPrevisao().equals(data));
+
+        if (jaExiste) {
             log.debug("⏩ Previsão para {} em {} já existe, pulando...", municipioNormalizado, data);
-            return;
+            return new ArrayList<>();
         }
 
         // Simula dados (em produção, viriam de um modelo preditivo)
@@ -77,9 +94,7 @@ public class PrevisaoService {
                 riscoDengue
         );
 
-        repository.save(entity);
-        log.info("📊 Previsão salva para {} em {}: temp={}°C, precip={}mm, umidade={}%",
-                municipioNormalizado, data, entity.getTemperaturaPrevista(),
-                entity.getPrecipitacaoPrevista(), entity.getUmidadePrevista());
+        return List.of(entity);
     }
+
 }
