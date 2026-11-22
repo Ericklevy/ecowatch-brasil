@@ -1,4 +1,5 @@
 <p align="center">
+  <a href="https://github.com/Ericklevy/ecowatch-brasil/actions/workflows/ci.yml"><img src="https://github.com/Ericklevy/ecowatch-brasil/actions/workflows/ci.yml/badge.svg" alt="CI - Testes Automatizados" /></a>
   <img src="https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" />
   <img src="https://img.shields.io/badge/Spring%20Boot-3.4-6DB33F?style=for-the-badge&logo=spring-boot&logoColor=white" />
   <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
