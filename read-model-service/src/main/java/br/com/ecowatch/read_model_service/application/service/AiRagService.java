@@ -1,6 +1,7 @@
 package br.com.ecowatch.read_model_service.application.service;
 
 import br.com.ecowatch.read_model_service.application.dto.*;
+import br.com.ecowatch.read_model_service.util.CityNameNormalizer;
 import br.com.ecowatch.read_model_service.domain.model.NewsCategory;
 import br.com.ecowatch.read_model_service.infrastructure.entity.NewsEntity;
 import br.com.ecowatch.read_model_service.infrastructure.persistence.NewsRepository;
@@ -17,6 +18,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -29,6 +32,28 @@ public class AiRagService {
 
     private final JdbcTemplate jdbcTemplate;
     private final NewsRepository newsRepository;
+    private final DashboardService dashboardService;
+
+    /** Quando o Gemini responde 429 (cota grátis acabou), evitamos novas chamadas até este horário. */
+    private volatile Instant cotaEsgotadaAte = Instant.EPOCH;
+
+    /** Período de espera depois de um 429 antes de tentar o Gemini de novo. */
+    private static final Duration PAUSA_COTA = Duration.ofMinutes(30);
+
+    static final String AVISO_LIMITE = "⚠️ **O limite gratuito da IA foi atingido por agora.** "
+            + "Enquanto isso, mostro abaixo os dados que o EcoWatch já tem salvos, sem a síntese da IA. "
+            + "Tente de novo mais tarde para receber uma resposta completa.\n\n";
+
+    /** As 27 capitais, com o nome como o usuário escreve. A chave é o nome normalizado (sem acento, minúsculo). */
+    static final Map<String, String> CAPITAIS = new LinkedHashMap<>();
+    static {
+        for (String c : List.of("Rio Branco", "Maceió", "Macapá", "Manaus", "Salvador", "Fortaleza", "Brasília",
+                "Vitória", "Goiânia", "São Luís", "Cuiabá", "Campo Grande", "Belo Horizonte", "Belém",
+                "João Pessoa", "Curitiba", "Recife", "Teresina", "Rio de Janeiro", "Natal", "Porto Alegre",
+                "Porto Velho", "Boa Vista", "Florianópolis", "São Paulo", "Aracaju", "Palmas")) {
+            CAPITAIS.put(CityNameNormalizer.normalize(c), c);
+        }
+    }
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
@@ -59,28 +84,48 @@ public class AiRagService {
         log.info("Recebida pergunta RAG: '{}' (Cat: {}, UF: {}, TopK: {})",
                 pergunta, request.getCategoria(), request.getEstado(), topK);
 
-        // 1. Tenta gerar o embedding da pergunta se a API do Gemini estiver configurada
-        String queryVectorStr = null;
-        if (isGeminiConfigured()) {
-            queryVectorStr = generateEmbedding(pergunta);
-        }
+        // 1. Embedding da pergunta (se o Gemini estiver disponível e com cota)
+        String queryVectorStr = podeUsarGemini() ? generateEmbedding(pergunta) : null;
 
-        // 2. Busca notícias similares no banco (via pgvector ou fallback semântico)
+        // 2. Notícias parecidas (pgvector ou busca por palavras)
         List<RagSourceItem> fontes = searchSimilarNews(pergunta, queryVectorStr, request.getCategoria(), request.getEstado(), topK);
 
-        // 3. Formulação da Resposta
+        // 3. Dados medidos pelo próprio EcoWatch para as capitais citadas (na pergunta ou na conversa)
+        List<String> cidades = detectarCapitais(pergunta, request.getHistorico());
+        Map<String, DashboardDTO> dados = new LinkedHashMap<>();
+        for (String cidade : cidades) {
+            try {
+                DashboardDTO d = dashboardService.getDashboard(cidade);
+                if (d != null && (!vazio(d.getAlertas()) || !vazio(d.getPrevisoes()))) {
+                    dados.put(cidade, d);
+                }
+            } catch (Exception e) {
+                log.warn("Não consegui ler os dados de {}: {}", cidade, e.getMessage());
+            }
+        }
+
+        // 4. Resposta
         String respostaFinal;
         String modeloUtilizado;
+        boolean limiteAtingido = false;
 
-        if (fontes.isEmpty()) {
-            respostaFinal = "Não foram encontradas notícias ou comunicados oficiais recentes que correspondam a essa busca nos registros do EcoWatch Brasil. Tente buscar com outros termos ou verificar a central de alertas.";
+        if (fontes.isEmpty() && dados.isEmpty()) {
+            respostaFinal = "Não encontrei notícias nem dados medidos no EcoWatch que respondam a essa pergunta. "
+                    + "Tente citar uma capital (ex.: *Como está o risco de incêndio em Cuiabá?*) ou usar outros termos.";
             modeloUtilizado = "ecowatch-rag-empty";
-        } else if (isGeminiConfigured()) {
-            respostaFinal = generateLlmAnswer(pergunta, fontes);
-            modeloUtilizado = geminiModel;
+        } else if (podeUsarGemini()) {
+            String llm = generateLlmAnswer(pergunta, fontes, dados, request.getHistorico());
+            if (llm != null) {
+                respostaFinal = llm;
+                modeloUtilizado = geminiModel;
+            } else {
+                limiteAtingido = cotaEsgotada();
+                respostaFinal = (limiteAtingido ? AVISO_LIMITE : "") + generateFactualSummary(fontes, dados);
+                modeloUtilizado = "ecowatch-rag-synthesizer";
+            }
         } else {
-            // Modo factual inteligente sem chave da API Gemini configurada
-            respostaFinal = generateFactualSummary(pergunta, fontes);
+            limiteAtingido = cotaEsgotada();
+            respostaFinal = (limiteAtingido ? AVISO_LIMITE : "") + generateFactualSummary(fontes, dados);
             modeloUtilizado = "ecowatch-rag-synthesizer";
         }
 
@@ -93,7 +138,95 @@ public class AiRagService {
                 .totalFontesEncontradas(fontes.size())
                 .modelo(modeloUtilizado)
                 .tempoRespostaMs(elapsedMs)
+                .limiteAtingido(limiteAtingido)
+                .cidadesConsultadas(new ArrayList<>(dados.keySet()))
+                .periodoFontes(periodo(fontes))
                 .build();
+    }
+
+    /** Capitais citadas na pergunta; se nenhuma, as da última pergunta do usuário (para "e lá, vai chover?"). */
+    static List<String> detectarCapitais(String pergunta, List<AiAskRequest.HistoricoItem> historico) {
+        List<String> achadas = capitaisNoTexto(pergunta);
+        if (achadas.isEmpty() && historico != null) {
+            for (int i = historico.size() - 1; i >= 0 && achadas.isEmpty(); i--) {
+                AiAskRequest.HistoricoItem h = historico.get(i);
+                if (h != null && "usuario".equalsIgnoreCase(h.getAutor())) {
+                    achadas = capitaisNoTexto(h.getTexto());
+                }
+            }
+        }
+        return achadas.size() > 3 ? achadas.subList(0, 3) : achadas;
+    }
+
+    private static List<String> capitaisNoTexto(String texto) {
+        String t = " " + CityNameNormalizer.normalize(texto).replaceAll("[^a-z ]", " ") + " ";
+        List<String> achadas = new ArrayList<>();
+        for (var e : CAPITAIS.entrySet()) {
+            if (t.contains(" " + e.getKey() + " ")) {
+                achadas.add(e.getValue());
+            }
+        }
+        return achadas;
+    }
+
+    private static boolean vazio(List<?> l) {
+        return l == null || l.isEmpty();
+    }
+
+    private static final DateTimeFormatter DIA = DateTimeFormatter.ofPattern("dd/MM").withZone(ZoneId.of("America/Sao_Paulo"));
+
+    static String periodo(List<RagSourceItem> fontes) {
+        List<Instant> datas = fontes.stream().map(RagSourceItem::getDataHora).filter(Objects::nonNull).sorted().toList();
+        if (datas.isEmpty()) return null;
+        String ini = DIA.format(datas.get(0)), fim = DIA.format(datas.get(datas.size() - 1));
+        return ini.equals(fim) ? ini : ini + " a " + fim;
+    }
+
+    private boolean podeUsarGemini() {
+        return isGeminiConfigured() && !cotaEsgotada();
+    }
+
+    boolean cotaEsgotada() {
+        return Instant.now().isBefore(cotaEsgotadaAte);
+    }
+
+    private void registrarCotaEsgotada() {
+        cotaEsgotadaAte = Instant.now().plus(PAUSA_COTA);
+        log.warn("Cota do Gemini esgotada (429). Pausando chamadas por {} min.", PAUSA_COTA.toMinutes());
+    }
+
+    private String contextoDados(Map<String, DashboardDTO> dados) {
+        StringBuilder sb = new StringBuilder();
+        LocalDateTime limite = LocalDateTime.now().minusDays(3);
+        for (var e : dados.entrySet()) {
+            sb.append("--- ").append(e.getKey().toUpperCase()).append(" ---\n");
+            var alertas = e.getValue().getAlertas() == null ? List.<AlertDTO>of() : e.getValue().getAlertas().stream()
+                    .filter(a -> a.getDataHoraAlerta() == null || a.getDataHoraAlerta().isAfter(limite)).limit(5).toList();
+            if (alertas.isEmpty()) {
+                sb.append("Alertas nos últimos 3 dias: nenhum.\n");
+            } else {
+                sb.append("Alertas nos últimos 3 dias:\n");
+                for (AlertDTO a : alertas) {
+                    sb.append(String.format("• %s (%s): %s%n", a.getTipoAlerta(),
+                            a.getDataHoraAlerta() != null ? DATE_FORMATTER.format(a.getDataHoraAlerta().atZone(ZoneId.of("America/Sao_Paulo"))) : "sem data",
+                            a.getMensagem()));
+                }
+            }
+            if (!vazio(e.getValue().getPrevisoes())) {
+                sb.append("Previsão:\n");
+                for (PrevisaoDTO pr : e.getValue().getPrevisoes()) {
+                    sb.append(String.format("• %s: %s °C, chuva %s mm, umidade %s%%, risco de incêndio %s/100, risco de dengue %s/100%n",
+                            pr.getDataPrevisao(), num(pr.getTemperaturaPrevista()), num(pr.getPrecipitacaoPrevista()),
+                            num(pr.getUmidadePrevista()), pr.getRiscoIncendio(), pr.getRiscoDengue()));
+                }
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+    private static String num(Double v) {
+        return v == null ? "?" : String.format(Locale.forLanguageTag("pt-BR"), "%.1f", v);
     }
 
     /**
@@ -211,7 +344,8 @@ public class AiRagService {
     /**
      * Envia o contexto das notícias recuperadas para o modelo Gemini formular a resposta final.
      */
-    private String generateLlmAnswer(String pergunta, List<RagSourceItem> fontes) {
+    private String generateLlmAnswer(String pergunta, List<RagSourceItem> fontes, Map<String, DashboardDTO> dados,
+                                     List<AiAskRequest.HistoricoItem> historico) {
         try {
             StringBuilder contextBuilder = new StringBuilder();
             for (int i = 0; i < fontes.size(); i++) {
@@ -236,21 +370,41 @@ public class AiRagService {
                 ));
             }
 
+            StringBuilder conversa = new StringBuilder();
+            if (historico != null) {
+                historico.stream().skip(Math.max(0, historico.size() - 4)).forEach(h -> {
+                    if (h != null && h.getTexto() != null) {
+                        String t = h.getTexto().length() > 500 ? h.getTexto().substring(0, 500) + "…" : h.getTexto();
+                        conversa.append("usuario".equalsIgnoreCase(h.getAutor()) ? "Usuário: " : "EcoWatch AI: ").append(t).append("\n");
+                    }
+                });
+            }
+
             String prompt = String.format("""
-                Você é o EcoWatch Brasil AI, especialista em monitoramento climático e desastres ambientais.
-                
-                DIRETRIZES OBRIGATÓRIAS:
-                1. Responda em Português do Brasil com clareza, empatia e tom técnico/informativo.
-                2. Baseie sua resposta EXCLUSIVAMENTE nas matérias oficiais fornecidas abaixo no CONTEXTO.
-                3. Cite expressamente os órgãos ou fontes (ex: Defesa Civil, Agência Brasil, Inmet, INPE), datas e locais.
-                4. Sempre mencione que as informações são baseadas nos relatórios oficiais do sistema.
-                
-                CONTEXTO DE NOTÍCIAS OFICIAIS:
+                Você é o EcoWatch AI, assistente de monitoramento climático e de desastres ambientais no Brasil.
+
+                REGRAS:
+                1. Responda em português do Brasil, de forma clara e direta (no máximo uns 3 parágrafos curtos ou uma lista).
+                2. Use SOMENTE as informações do CONTEXTO abaixo. Se o contexto não responde, diga isso com honestidade.
+                3. Quando usar DADOS MEDIDOS, diga que são do monitoramento do EcoWatch e informe a data.
+                4. Quando usar NOTÍCIAS, cite a fonte e a data (ex.: "segundo a Defesa Civil, em 20/11").
+                5. Em situação de risco, oriente a seguir a Defesa Civil local (telefone 199).
+                6. Pode usar **negrito** e listas com "- ".
+
+                DADOS MEDIDOS PELO ECOWATCH (alertas e previsões das capitais citadas):
                 %s
-                
-                PERGUNTA DO USUÁRIO:
+
+                NOTÍCIAS OFICIAIS:
                 %s
-                """, contextBuilder, pergunta);
+
+                CONVERSA ANTERIOR:
+                %s
+
+                PERGUNTA:
+                %s
+                """, dados.isEmpty() ? "(nenhuma capital citada)" : contextoDados(dados),
+                    contextBuilder.isEmpty() ? "(nenhuma notícia relevante)" : contextBuilder,
+                    conversa.isEmpty() ? "(início da conversa)" : conversa, pergunta);
 
             Map<String, Object> part = Map.of("text", prompt);
             Map<String, Object> content = Map.of("parts", List.of(part));
@@ -287,6 +441,8 @@ public class AiRagService {
                         return textNode.asText().trim();
                     }
                 }
+            } else if (httpResponse.statusCode() == 429) {
+                registrarCotaEsgotada();
             } else {
                 log.warn("Gemini API retornou status {}: {}", httpResponse.statusCode(), httpResponse.body());
             }
@@ -294,15 +450,21 @@ public class AiRagService {
             log.error("Erro ao chamar API do Gemini para gerar resposta: {}", e.getMessage());
         }
 
-        // Se falhar a chamada externa ao Gemini, retorna a síntese factual estruturada
-        return generateFactualSummary(pergunta, fontes);
+        // Se falhar, quem chamou monta a síntese com os dados salvos
+        return null;
     }
 
     /**
      * Síntese factual inteligente sem alucinações para quando não há LLM externo ou a chave não foi definida.
      */
-    private String generateFactualSummary(String pergunta, List<RagSourceItem> fontes) {
+    private String generateFactualSummary(List<RagSourceItem> fontes, Map<String, DashboardDTO> dados) {
         StringBuilder sb = new StringBuilder();
+        if (!dados.isEmpty()) {
+            sb.append("**Dados medidos pelo EcoWatch:**\n\n").append(contextoDados(dados).replace("--- ", "**").replace(" ---", "**"));
+        }
+        if (fontes.isEmpty()) {
+            return sb.toString().trim();
+        }
         sb.append("Com base nas notícias oficiais monitoradas pelo EcoWatch Brasil, reunimos os seguintes dados apurados:\n\n");
 
         for (RagSourceItem f : fontes) {
@@ -361,6 +523,8 @@ public class AiRagService {
                     }
                     return "[" + String.join(",", values) + "]";
                 }
+            } else if (httpResponse.statusCode() == 429) {
+                registrarCotaEsgotada();
             } else {
                 log.warn("Erro ao gerar embedding no Gemini (Status {}): {}", httpResponse.statusCode(), httpResponse.body());
             }
@@ -374,13 +538,26 @@ public class AiRagService {
     /**
      * Indexa em lote as notícias existentes no banco que ainda não possuem registro de embeddings.
      */
+    static final int MAX_POR_SYNC = 200;
+
     public int syncEmbeddings() {
         log.info("Iniciando sincronização de embeddings RAG...");
         int count = 0;
 
         try {
-            List<NewsEntity> allNews = newsRepository.findAll();
-            for (NewsEntity news : allNews) {
+            // Só as notícias que ainda não têm vetor: cada uma gasta uma chamada do Gemini
+            Set<Long> jaIndexadas = new HashSet<>(jdbcTemplate.queryForList(
+                    "SELECT noticia_id FROM rag_noticias_embeddings WHERE embedding IS NOT NULL", Long.class));
+            List<NewsEntity> pendentes = newsRepository.findAll().stream()
+                    .filter(n -> !jaIndexadas.contains(n.getId()))
+                    .limit(MAX_POR_SYNC)
+                    .toList();
+            log.info("{} notícias sem vetor (máximo {} por rodada).", pendentes.size(), MAX_POR_SYNC);
+            for (NewsEntity news : pendentes) {
+                if (cotaEsgotada()) {
+                    log.warn("Cota do Gemini esgotada: o restante fica para a próxima sincronização.");
+                    break;
+                }
                 String semanticContent = String.format(
                         "[%s] [%s] Título: %s. Resumo: %s. Fonte: %s.",
                         news.getCategoria(),
