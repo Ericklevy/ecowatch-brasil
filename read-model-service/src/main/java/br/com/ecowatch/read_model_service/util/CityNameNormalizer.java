@@ -10,7 +10,8 @@ public class CityNameNormalizer {
         if (name == null || name.isBlank()) {
             return "";
         }
-        String normalized = Normalizer.normalize(name.trim(), Normalizer.Form.NFD);
-        return normalized.replaceAll("\\p{M}", "").toLowerCase();
+        String withSpaces = name.trim().replace('-', ' ');
+        String normalized = Normalizer.normalize(withSpaces, Normalizer.Form.NFD);
+        return normalized.replaceAll("\\p{M}", "").toLowerCase().replaceAll("\\s+", " ").trim();
     }
 }

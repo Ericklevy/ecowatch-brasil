@@ -11,5 +11,7 @@ class CityNameNormalizerTest {
         assertEquals("brasilia", CityNameNormalizer.normalize("Brasília"));
         assertEquals("sao paulo", CityNameNormalizer.normalize("São Paulo"));
         assertEquals("salvador", CityNameNormalizer.normalize("Salvador"));
+        assertEquals("porto alegre", CityNameNormalizer.normalize("porto-alegre"));
+        assertEquals("rio de janeiro", CityNameNormalizer.normalize("Rio-de-Janeiro"));
     }
 }
