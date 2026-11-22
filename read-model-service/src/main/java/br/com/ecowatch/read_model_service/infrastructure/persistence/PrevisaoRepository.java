@@ -12,4 +12,8 @@ public interface PrevisaoRepository extends JpaRepository<PrevisaoEntity, Long> 
     List<PrevisaoEntity> findByMunicipioOrderByDataPrevisaoDesc(String municipio);
     List<PrevisaoEntity> findByMunicipioIgnoreCaseAndDataPrevisaoAfterOrderByDataPrevisaoAsc(String municipio, LocalDate data);
     List<PrevisaoEntity> findByDataPrevisaoAfterOrderByDataPrevisaoAsc(LocalDate data);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByDataPrevisaoAfter(LocalDate data);
 }

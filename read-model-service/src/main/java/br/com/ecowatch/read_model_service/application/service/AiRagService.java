@@ -635,6 +635,7 @@ public class AiRagService {
         long totalNews = newsRepository.count();
         long totalEmbeddings = 0;
         boolean pgvectorActive = false;
+        String diagnostico = br.com.ecowatch.read_model_service.infrastructure.config.RagDatabaseInitializer.diagnostico;
 
         try {
             Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM rag_noticias_embeddings", Long.class);
@@ -645,6 +646,7 @@ public class AiRagService {
             pgvectorActive = true;
         } catch (Exception e) {
             log.debug("pgvector não ativo: {}", e.getMessage());
+            diagnostico = e.getMessage();
         }
 
         return AiStatusResponse.builder()
@@ -653,6 +655,7 @@ public class AiRagService {
                 .totalEmbeddings(totalEmbeddings)
                 .geminiConfigurado(isGeminiConfigured())
                 .modeloPadrao(geminiModel)
+                .diagnostico(pgvectorActive ? "ok" : (diagnostico == null ? null : diagnostico.substring(0, Math.min(300, diagnostico.length()))))
                 .build();
     }
 

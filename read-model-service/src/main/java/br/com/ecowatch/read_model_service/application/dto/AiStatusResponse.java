@@ -26,4 +26,7 @@ public class AiStatusResponse {
 
     @Schema(description = "Nome do modelo de IA configurado")
     private String modeloPadrao;
+
+    @Schema(description = "Motivo quando o pgvector não está ativo (para diagnóstico)")
+    private String diagnostico;
 }

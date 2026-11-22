@@ -24,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {
 
-    // Limite: 30 requisições por minuto por IP (recarga de 30 tokens a cada 1 minuto)
-    private static final int CAPACITY = 30;
+    // Limite: 60 requisições por minuto por IP (a primeira visita já faz umas 10)
+    private static final int CAPACITY = 60;
     private static final Duration REFILL_DURATION = Duration.ofMinutes(1);
 
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
@@ -54,7 +54,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
 
         // Aplicar limitação apenas nos endpoints de dados da API (/api/**)
-        if (path.startsWith("/api/")) {
+        if (path.startsWith("/api/") && !"OPTIONS".equalsIgnoreCase(request.getMethod())) {
             String clientIp = getClientIp(request);
             Bucket bucket = buckets.computeIfAbsent(clientIp, k -> createNewBucket());
 
@@ -63,6 +63,9 @@ public class RateLimitingFilter extends OncePerRequestFilter {
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                 response.setContentType("application/json");
                 response.setHeader("Retry-After", "60");
+                // Sem este cabeçalho o navegador esconde o 429 e o site só vê "Failed to fetch"
+                response.setHeader("Access-Control-Allow-Origin", "*");
+                response.setHeader("Access-Control-Expose-Headers", "Retry-After");
                 response.getWriter().write("""
                     {
                         "status": 429,
