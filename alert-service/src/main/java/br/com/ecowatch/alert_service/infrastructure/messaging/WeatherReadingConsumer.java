@@ -46,20 +46,32 @@ public class WeatherReadingConsumer {
             log.info("📡 Nova leitura recebida de {}: {}°C, {} focos de calor, nível rio: {}m",
                     reading.municipio(), reading.temperatura(), reading.focosIncendio(), reading.nivelRio());
 
-            // 1. Salva a previsão na tabela 'previsoes'
+            // 1. Salva/atualiza a previsão na tabela 'previsoes' (evita duplicar linhas para o mesmo dia)
             int riscoIncendio = (reading.focosIncendio() > 0 || (reading.temperatura() > 30 && reading.umidade() < 35)) ? 80 : 20;
             int riscoDengue = (reading.umidade() > 70 && reading.temperatura() > 25) ? 75 : 15;
             LocalDate dataPrevisao = reading.timestamp() != null ? reading.timestamp().toLocalDate() : LocalDate.now();
 
-            PrevisaoEntity previsaoEntity = new PrevisaoEntity(
-                    reading.municipio(),
-                    dataPrevisao,
-                    reading.temperatura(),
-                    reading.precipitacao(),
-                    reading.umidade(),
-                    riscoIncendio,
-                    riscoDengue
-            );
+            List<PrevisaoEntity> existentes = previsaoRepository.findByMunicipioAndDataPrevisao(municipioNormalizado, dataPrevisao);
+            PrevisaoEntity previsaoEntity;
+            if (!existentes.isEmpty()) {
+                previsaoEntity = existentes.get(0);
+                previsaoEntity.setTemperaturaPrevista(reading.temperatura());
+                previsaoEntity.setPrecipitacaoPrevista(reading.precipitacao());
+                previsaoEntity.setUmidadePrevista(reading.umidade());
+                previsaoEntity.setRiscoIncendio(riscoIncendio);
+                previsaoEntity.setRiscoDengue(riscoDengue);
+                log.debug("🔄 Atualizando previsão existente para {} em {}", reading.municipio(), dataPrevisao);
+            } else {
+                previsaoEntity = new PrevisaoEntity(
+                        municipioNormalizado,
+                        dataPrevisao,
+                        reading.temperatura(),
+                        reading.precipitacao(),
+                        reading.umidade(),
+                        riscoIncendio,
+                        riscoDengue
+                );
+            }
             previsaoRepository.save(previsaoEntity);
             log.info("💾 Dados salvos na tabela 'previsoes' para {}", reading.municipio());
 

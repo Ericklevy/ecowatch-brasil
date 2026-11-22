@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @Service
+@org.springframework.context.annotation.Lazy(false)
 public class WeatherIngestionScheduler {
 
     private final WeatherClient primaryClient;

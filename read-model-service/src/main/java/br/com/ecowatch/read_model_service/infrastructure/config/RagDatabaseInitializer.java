@@ -48,6 +48,18 @@ public class RagDatabaseInitializer {
                 log.debug("Verificação prévia de noticias_ambientais: {}", ex.getMessage());
             }
 
+            // 0b. Remove duplicatas legadas na tabela de previsoes se houver
+            try {
+                jdbcTemplate.execute("""
+                    DELETE FROM previsoes a USING previsoes b
+                    WHERE a.id < b.id
+                      AND a.municipio = b.municipio
+                      AND a.data_previsao = b.data_previsao;
+                """);
+            } catch (Exception ex) {
+                log.debug("Limpeza de duplicatas de previsoes: {}", ex.getMessage());
+            }
+
             // 1. Tenta ativar a extensão pgvector (nativa no Supabase)
             try {
                 jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector;");

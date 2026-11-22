@@ -3,6 +3,7 @@ package br.com.ecowatch.read_model_service.application.service;
 import br.com.ecowatch.read_model_service.application.dto.AlertDTO;
 import br.com.ecowatch.read_model_service.application.dto.DashboardDTO;
 import br.com.ecowatch.read_model_service.application.dto.PrevisaoDTO;
+import br.com.ecowatch.read_model_service.infrastructure.entity.PrevisaoEntity;
 import br.com.ecowatch.read_model_service.infrastructure.persistence.AlertRepository;
 import br.com.ecowatch.read_model_service.infrastructure.persistence.PrevisaoRepository;
 import br.com.ecowatch.read_model_service.util.CityNameNormalizer;
@@ -12,7 +13,9 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -44,11 +47,20 @@ public class DashboardService {
                 ))
                 .collect(Collectors.toList());
 
-        // Previsões para os próximos 3 dias
-        var previsaoEntities = previsaoRepository.findByMunicipioIgnoreCaseAndDataPrevisaoAfterOrderByDataPrevisaoAsc(normalizedQuery, LocalDate.now().minusDays(1));
+        // Previsões para os próximos dias (deduplica por data para não ocupar vagas com leituras repetidas do mesmo dia)
+        var previsaoEntities = previsaoRepository.findByMunicipioIgnoreCaseAndDataPrevisaoAfterOrderByDataPrevisaoAsc(
+                normalizedQuery, LocalDate.now().minusDays(1));
 
-        var previsoes = previsaoEntities.stream()
-                .limit(3)
+        // Preserva no máximo 1 registro por data diferente (mantém a leitura mais recente em caso de duplicatas antigas)
+        Map<LocalDate, PrevisaoEntity> deduplicadasPorData = new LinkedHashMap<>();
+        for (PrevisaoEntity p : previsaoEntities) {
+            if (p.getDataPrevisao() != null && !p.getDataPrevisao().isBefore(LocalDate.now())) {
+                deduplicadasPorData.put(p.getDataPrevisao(), p);
+            }
+        }
+
+        var previsoes = deduplicadasPorData.values().stream()
+                .limit(4)
                 .map(p -> new PrevisaoDTO(
                         p.getMunicipio(),
                         p.getDataPrevisao(),

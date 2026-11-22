@@ -55,6 +55,19 @@ public class AiRagService {
             CAPITAIS.put(CityNameNormalizer.normalize(c), c);
         }
     }
+
+    /** Mapeamento de cada capital para a respectiva Unidade Federativa (UF). */
+    static final Map<String, String> CAPITAL_UF = Map.ofEntries(
+            Map.entry("Rio Branco", "AC"), Map.entry("Maceió", "AL"), Map.entry("Macapá", "AP"),
+            Map.entry("Manaus", "AM"), Map.entry("Salvador", "BA"), Map.entry("Fortaleza", "CE"),
+            Map.entry("Brasília", "DF"), Map.entry("Vitória", "ES"), Map.entry("Goiânia", "GO"),
+            Map.entry("São Luís", "MA"), Map.entry("Cuiabá", "MT"), Map.entry("Campo Grande", "MS"),
+            Map.entry("Belo Horizonte", "MG"), Map.entry("Belém", "PA"), Map.entry("João Pessoa", "PB"),
+            Map.entry("Curitiba", "PR"), Map.entry("Recife", "PE"), Map.entry("Teresina", "PI"),
+            Map.entry("Rio de Janeiro", "RJ"), Map.entry("Natal", "RN"), Map.entry("Porto Alegre", "RS"),
+            Map.entry("Porto Velho", "RO"), Map.entry("Boa Vista", "RR"), Map.entry("Florianópolis", "SC"),
+            Map.entry("São Paulo", "SP"), Map.entry("Aracaju", "SE"), Map.entry("Palmas", "TO")
+    );
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
@@ -86,13 +99,7 @@ public class AiRagService {
         log.info("Recebida pergunta RAG: '{}' (Cat: {}, UF: {}, TopK: {})",
                 pergunta, request.getCategoria(), request.getEstado(), topK);
 
-        // 1. Embedding da pergunta (se o Gemini estiver disponível e com cota)
-        String queryVectorStr = podeUsarGemini() ? generateEmbedding(pergunta) : null;
-
-        // 2. Notícias parecidas (pgvector ou busca por palavras)
-        List<RagSourceItem> fontes = searchSimilarNews(pergunta, queryVectorStr, request.getCategoria(), request.getEstado(), topK);
-
-        // 3. Dados medidos pelo próprio EcoWatch para as capitais citadas (na pergunta ou na conversa)
+        // 1. Dados medidos pelo próprio EcoWatch para as capitais citadas (na pergunta ou na conversa)
         List<String> cidades = detectarCapitais(pergunta, request.getHistorico());
         Map<String, DashboardDTO> dados = new LinkedHashMap<>();
         for (String cidade : cidades) {
@@ -105,6 +112,18 @@ public class AiRagService {
                 log.warn("Não consegui ler os dados de {}: {}", cidade, e.getMessage());
             }
         }
+
+        // 2. Inferência de estado: se o estado não foi passado explicitamente, deduz da capital detectada
+        String estadoEfetivo = request.getEstado();
+        if ((estadoEfetivo == null || estadoEfetivo.isBlank() || "all".equalsIgnoreCase(estadoEfetivo)) && !cidades.isEmpty()) {
+            estadoEfetivo = CAPITAL_UF.get(cidades.get(0));
+        }
+
+        // 3. Embedding da pergunta (se o Gemini estiver disponível e com cota)
+        String queryVectorStr = podeUsarGemini() ? generateEmbedding(pergunta) : null;
+
+        // 4. Notícias parecidas com corte estrito de similaridade, filtro por estado e decaimento temporal
+        List<RagSourceItem> fontes = searchSimilarNews(pergunta, queryVectorStr, request.getCategoria(), estadoEfetivo, topK);
 
         // 4. Resposta
         String respostaFinal;
@@ -232,10 +251,10 @@ public class AiRagService {
     }
 
     /**
-     * Busca as notícias mais relevantes no banco de dados.
+     * Busca as notícias mais relevantes no banco de dados com corte de similaridade e relevância geográfica/temporal.
      */
     private List<RagSourceItem> searchSimilarNews(String queryText, String vectorStr, NewsCategory categoria, String estado, int limit) {
-        // Se temos vetor, tenta busca vetorial de cosseno no pgvector
+        // Se temos vetor, realiza busca de vizinhos no pgvector com pontuação calibrada
         if (vectorStr != null) {
             try {
                 String sql = """
@@ -244,44 +263,83 @@ public class AiRagService {
                     FROM rag_noticias_embeddings r
                     JOIN noticias_ambientais n ON r.noticia_id = n.id
                     WHERE (? IS NULL OR n.categoria = ?)
-                      AND (? IS NULL OR n.estado = ?)
                     ORDER BY r.embedding <=> ?::vector ASC
-                    LIMIT ?
+                    LIMIT 12
                 """;
 
                 String catStr = categoria != null ? categoria.name() : null;
-                String ufStr = estado != null && !estado.isBlank() ? estado.trim().toUpperCase() : null;
+                String ufAlvo = estado != null && !estado.isBlank() ? estado.trim().toUpperCase() : null;
 
-                List<RagSourceItem> items = jdbcTemplate.query(
+                List<RagSourceItem> candidates = jdbcTemplate.query(
                         sql,
                         ps -> {
                             ps.setString(1, vectorStr);
                             ps.setString(2, catStr);
                             ps.setString(3, catStr);
-                            ps.setString(4, ufStr);
-                            ps.setString(5, ufStr);
-                            ps.setString(6, vectorStr);
-                            ps.setInt(7, limit);
+                            ps.setString(4, vectorStr);
                         },
-                        (rs, rowNum) -> RagSourceItem.builder()
-                                .id(rs.getLong("noticia_id"))
-                                .titulo(rs.getString("titulo"))
-                                .resumo(rs.getString("resumo"))
-                                .fonte(rs.getString("fonte"))
-                                .url(rs.getString("url"))
-                                .dataHora(rs.getTimestamp("data_hora").toInstant())
-                                .categoria(NewsCategory.valueOf(rs.getString("categoria")))
-                                .municipio(rs.getString("municipio"))
-                                .estado(rs.getString("estado"))
-                                .similaridade(Math.round(rs.getDouble("similaridade") * 100.0) / 100.0)
-                                .build()
+                        (rs, rowNum) -> {
+                            Instant dataHora = rs.getTimestamp("data_hora") != null ? rs.getTimestamp("data_hora").toInstant() : null;
+                            double rawSim = rs.getDouble("similaridade");
+                            String itemUf = rs.getString("estado");
+
+                            // Decaimento temporal: notícias antigas têm leve penalização para priorizar fatos recentes
+                            double scoreAjustado = rawSim;
+                            if (dataHora != null) {
+                                long diasAtras = Duration.between(dataHora, Instant.now()).toDays();
+                                if (diasAtras > 40) {
+                                    scoreAjustado -= 0.08;
+                                } else if (diasAtras > 20) {
+                                    scoreAjustado -= 0.04;
+                                } else if (diasAtras <= 7) {
+                                    scoreAjustado += 0.02;
+                                }
+                            }
+
+                            // Corte de similaridade mínima:
+                            // Se a consulta possui estado específico, notícias de outros estados exigem similaridade estrita (>= 0.78)
+                            // Notícias do mesmo estado ou gerais exigem similaridade mínima de 0.70 / 0.72
+                            double corteMinimo;
+                            if (ufAlvo != null) {
+                                if (itemUf != null && itemUf.equalsIgnoreCase(ufAlvo)) {
+                                    corteMinimo = 0.70;
+                                } else if (itemUf == null || itemUf.isBlank()) {
+                                    corteMinimo = 0.72; // Notícia de abrangência nacional
+                                } else {
+                                    corteMinimo = 0.78; // Notícia de outro estado
+                                }
+                            } else {
+                                corteMinimo = 0.72;
+                            }
+
+                            if (scoreAjustado < corteMinimo) {
+                                return null;
+                            }
+
+                            return RagSourceItem.builder()
+                                    .id(rs.getLong("noticia_id"))
+                                    .titulo(rs.getString("titulo"))
+                                    .resumo(rs.getString("resumo"))
+                                    .fonte(rs.getString("fonte"))
+                                    .url(rs.getString("url"))
+                                    .dataHora(dataHora)
+                                    .categoria(NewsCategory.valueOf(rs.getString("categoria")))
+                                    .municipio(rs.getString("municipio"))
+                                    .estado(itemUf)
+                                    .similaridade(Math.round(scoreAjustado * 100.0) / 100.0)
+                                    .build();
+                        }
                 );
 
-                if (!items.isEmpty()) {
-                    return items;
-                }
+                List<RagSourceItem> itensValidos = candidates.stream()
+                        .filter(Objects::nonNull)
+                        .sorted(Comparator.comparingDouble(RagSourceItem::getSimilaridade).reversed())
+                        .limit(limit)
+                        .toList();
+
+                return itensValidos;
             } catch (Exception e) {
-                log.warn("Busca vetorial via pgvector não retornou resultados ou falhou: {}. Usando busca contextual...", e.getMessage());
+                log.warn("Busca vetorial via pgvector falhou: {}. Usando fallback contextual...", e.getMessage());
             }
         }
 
@@ -308,7 +366,7 @@ public class AiRagService {
                 FROM noticias_ambientais
                 WHERE (LOWER(titulo) LIKE LOWER(?) OR LOWER(resumo) LIKE LOWER(?))
                   AND (? IS NULL OR categoria = ?)
-                  AND (? IS NULL OR estado = ?)
+                  AND (? IS NULL OR estado = ? OR estado IS NULL)
                 ORDER BY data_hora DESC
                 LIMIT ?
             """;
