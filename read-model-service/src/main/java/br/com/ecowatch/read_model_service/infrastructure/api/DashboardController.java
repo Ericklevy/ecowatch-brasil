@@ -26,6 +26,7 @@ import java.util.List;
 public class DashboardController {
 
     private final DashboardService dashboardService;
+    private final br.com.ecowatch.read_model_service.application.service.PrevisaoRealService previsaoRealService;
 
     @Operation(summary = "Obter dados do Dashboard", description = "Retorna um objeto consolidado contendo os alertas recentes (últimos 10) e previsões climáticas futuras (próximos 3 dias) para a cidade especificada.")
     @ApiResponses(value = {
@@ -43,6 +44,12 @@ public class DashboardController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Lista de alertas retornada com sucesso")
     })
+    @Operation(summary = "Previsões de todas as capitais", description = "Previsões reais (Open-Meteo) de D+1 a D+3 para as 27 capitais, com índices de risco de incêndio e de dengue.")
+    @GetMapping("/previsoes/all")
+    public ResponseEntity<java.util.List<br.com.ecowatch.read_model_service.application.dto.PrevisaoDTO>> getAllForecasts() {
+        return ResponseEntity.ok(previsaoRealService.todas());
+    }
+
     @GetMapping("/alerts/all")
     public ResponseEntity<List<AlertDTO>> getAllAlerts() {
         var alerts = dashboardService.getLatestNationalAlerts();

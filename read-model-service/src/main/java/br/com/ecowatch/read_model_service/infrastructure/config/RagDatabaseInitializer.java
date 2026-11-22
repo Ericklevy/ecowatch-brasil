@@ -13,6 +13,9 @@ public class RagDatabaseInitializer {
 
     private final JdbcTemplate jdbcTemplate;
 
+    /** Último problema encontrado ao preparar o pgvector (aparece em /api/v1/ai/status). */
+    public static volatile String diagnostico = "não verificado";
+
     @PostConstruct
     public void init() {
         try {
@@ -21,7 +24,24 @@ public class RagDatabaseInitializer {
                 jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector;");
                 log.info("✅ Extensão 'vector' (pgvector) inicializada/confirmada no PostgreSQL.");
             } catch (Exception ex) {
+                diagnostico = "CREATE EXTENSION falhou: " + ex.getMessage();
                 log.warn("Extensão pgvector não pôde ser criada (esperado em H2/local): {}", ex.getMessage());
+            }
+
+            // 1b. Se a tabela foi criada antes no modo fallback (coluna TEXT), recria com vector(768).
+            //     Os vetores são regerados pela próxima sincronização.
+            try {
+                String tipo = jdbcTemplate.queryForObject("""
+                    SELECT data_type FROM information_schema.columns
+                    WHERE table_name = 'rag_noticias_embeddings' AND column_name = 'embedding'
+                    """, String.class);
+                if (tipo != null && !"USER-DEFINED".equalsIgnoreCase(tipo)) {
+                    jdbcTemplate.queryForObject("SELECT '[1,2,3]'::vector::text", String.class); // só segue se o tipo existir
+                    log.warn("Tabela rag_noticias_embeddings estava com embedding {}; recriando como vector(768).", tipo);
+                    jdbcTemplate.execute("DROP TABLE rag_noticias_embeddings");
+                }
+            } catch (Exception ex) {
+                log.debug("Verificação do tipo da coluna embedding: {}", ex.getMessage());
             }
 
             // 2. Tenta criar a tabela com coluna vector(768)
@@ -37,8 +57,10 @@ public class RagDatabaseInitializer {
                     );
                 """);
                 log.info("✅ Tabela 'rag_noticias_embeddings' (pgvector 768d) pronta.");
+                diagnostico = "ok";
             } catch (Exception ex) {
                 // Fallback para bancos sem tipo vector (ex: H2 em memória em testes de integração)
+                diagnostico = "tabela vetorial não criada: " + ex.getMessage();
                 log.info("Criando tabela rag_noticias_embeddings em modo relacional fallback...");
                 jdbcTemplate.execute("""
                     CREATE TABLE IF NOT EXISTS rag_noticias_embeddings (
