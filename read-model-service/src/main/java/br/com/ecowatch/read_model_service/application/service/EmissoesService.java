@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 public class EmissoesService {
 
     private final EmissaoMunicipioRepository repository;
+    private final br.com.ecowatch.read_model_service.infrastructure.persistence.EmissorClimateTraceRepository climateTraceRepository;
 
     public List<RankingMunicipioItem> getRanking(String gasParam, String ufParam, Integer anoParam, Integer limiteParam) {
         String gas = normalizarGas(gasParam);
@@ -178,6 +179,32 @@ public class EmissoesService {
                 .explicacaoSetorDominante(explicacao)
                 .serieHistorica(serie)
                 .build();
+    }
+
+    public List<FonteEmissaoDTO> getFontesEmissao(String gasParam, String setorParam, Integer limiteParam) {
+        String gas = normalizarGas(gasParam);
+        String setor = (setorParam != null && !setorParam.isBlank() && !"ALL".equalsIgnoreCase(setorParam)) ? setorParam.trim() : null;
+        int limite = (limiteParam != null && limiteParam > 0) ? Math.min(limiteParam, 200) : 100;
+
+        List<br.com.ecowatch.read_model_service.infrastructure.entity.EmissorClimateTraceEntity> entidades =
+                climateTraceRepository.findTopEmissores(gas, setor);
+
+        return entidades.stream()
+                .limit(limite)
+                .map(e -> FonteEmissaoDTO.builder()
+                        .assetId(e.getAssetId())
+                        .nome(e.getNome())
+                        .setor(e.getSetor())
+                        .subSetor(e.getSubSetor())
+                        .setorRotulo(ClimateTraceIngestionService.traduzirSetor(e.getSetor()))
+                        .latitude(e.getLatitude())
+                        .longitude(e.getLongitude())
+                        .gas(e.getGas())
+                        .emissaoAnualT(Math.round(e.getEmissaoT() * 100.0) / 100.0)
+                        .ano(e.getAno())
+                        .credito("Climate TRACE (CC BY 4.0)")
+                        .build())
+                .collect(Collectors.toList());
     }
 
     private int resolverUltimoAno(String gas) {

@@ -128,4 +128,36 @@ class EmissoesControllerTest {
                 .andExpect(jsonPath("$.setorDominante").value("Mudança de uso da terra"))
                 .andExpect(jsonPath("$.serieHistorica[0].ano").value(2023));
     }
+
+    @Test
+    @DisplayName("GET /api/emissoes/fontes deve retornar fontes do Climate TRACE")
+    void shouldReturnFontesEmissaoClimateTrace() throws Exception {
+        FonteEmissaoDTO fonte = FonteEmissaoDTO.builder()
+                .assetId(60951975L)
+                .nome("Aterro Sanitário de Seropédica")
+                .setor("waste")
+                .subSetor("solid-waste-disposal")
+                .setorRotulo("Resíduos Sólidos e Aterros")
+                .latitude(-22.75)
+                .longitude(-43.71)
+                .gas("CH4")
+                .emissaoAnualT(175163.14)
+                .ano(2024)
+                .credito("Climate TRACE (CC BY 4.0)")
+                .build();
+
+        when(emissoesService.getFontesEmissao(eq("CH4"), any(), eq(100)))
+                .thenReturn(List.of(fonte));
+
+        mockMvc.perform(get("/api/emissoes/fontes")
+                        .param("gas", "CH4")
+                        .param("limite", "100")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].assetId").value(60951975))
+                .andExpect(jsonPath("$[0].nome").value("Aterro Sanitário de Seropédica"))
+                .andExpect(jsonPath("$[0].gas").value("CH4"))
+                .andExpect(jsonPath("$[0].setorRotulo").value("Resíduos Sólidos e Aterros"))
+                .andExpect(jsonPath("$[0].credito").value("Climate TRACE (CC BY 4.0)"));
+    }
 }

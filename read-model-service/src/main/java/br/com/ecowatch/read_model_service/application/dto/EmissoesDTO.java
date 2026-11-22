@@ -65,4 +65,22 @@ public class EmissoesDTO {
         private Double emissaoTotal;
         private Map<String, Double> quebraPorSetor;
     }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class FonteEmissaoDTO {
+        private Long assetId;
+        private String nome;
+        private String setor;
+        private String subSetor;
+        private String setorRotulo;
+        private Double latitude;
+        private Double longitude;
+        private String gas;
+        private Double emissaoAnualT;
+        private Integer ano;
+        private String credito;
+    }
 }

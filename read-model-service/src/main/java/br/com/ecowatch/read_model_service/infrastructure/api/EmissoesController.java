@@ -61,4 +61,17 @@ public class EmissoesController {
         }
         return ResponseEntity.ok(dto);
     }
+
+    @Operation(
+            summary = "Grandes fontes emissoras pontuais (Climate TRACE)",
+            description = "Retorna as principais fontes físicas pontuais de emissão de gases de efeito estufa no Brasil (usinas, aterros, mineração, refinarias, pecuária) com coordenadas geográficas."
+    )
+    @GetMapping("/fontes")
+    public ResponseEntity<List<FonteEmissaoDTO>> getFontes(
+            @Parameter(description = "Gás analisado: CO2e, CH4") @RequestParam(defaultValue = "CH4") String gas,
+            @Parameter(description = "Filtrar por setor (ex.: waste, power, manufacturing, agriculture)") @RequestParam(required = false) String setor,
+            @Parameter(description = "Limite de fontes (padrão 100, máx 200)") @RequestParam(defaultValue = "100") Integer limite
+    ) {
+        return ResponseEntity.ok(emissoesService.getFontesEmissao(gas, setor, limite));
+    }
 }
