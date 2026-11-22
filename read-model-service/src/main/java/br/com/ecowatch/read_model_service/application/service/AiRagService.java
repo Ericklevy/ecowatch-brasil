@@ -34,10 +34,10 @@ public class AiRagService {
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
     private String geminiApiKey;
 
-    @Value("${gemini.api.model:gemini-2.5-flash}")
+    @Value("${gemini.api.model:gemini-flash-lite-latest}")
     private String geminiModel;
 
-    @Value("${gemini.api.embedding-model:text-embedding-004}")
+    @Value("${gemini.api.embedding-model:gemini-embedding-001}")
     private String embeddingModel;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -332,7 +332,8 @@ public class AiRagService {
             Map<String, Object> content = Map.of("parts", List.of(part));
             Map<String, Object> requestPayload = Map.of(
                     "model", "models/" + embeddingModel,
-                    "content", content
+                    "content", content,
+                    "outputDimensionality", 768
             );
 
             String requestBody = objectMapper.writeValueAsString(requestPayload);
