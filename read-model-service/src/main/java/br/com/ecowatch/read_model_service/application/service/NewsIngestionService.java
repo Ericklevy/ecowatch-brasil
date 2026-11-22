@@ -42,6 +42,7 @@ public class NewsIngestionService {
     private final NewsRepository newsRepository;
     private final NewsClassifier newsClassifier;
     private final JdbcTemplate jdbcTemplate;
+    private final AiRagService aiRagService;
 
     public record FeedSource(String name, String url, boolean isEnvironmentalFeed) {}
 
@@ -83,6 +84,15 @@ public class NewsIngestionService {
                     int imported = syncAllSources();
                     log.info("Coleta concluída. Total importado: {}", imported);
                 }
+
+                // Sincroniza embeddings RAG das notícias
+                Thread.ofVirtual().start(() -> {
+                    try {
+                        aiRagService.syncEmbeddings();
+                    } catch (Exception ex) {
+                        log.warn("Falha não bloqueante na sincronização inicial de embeddings RAG: {}", ex.getMessage());
+                    }
+                });
             } catch (Exception e) {
                 log.warn("Falha não bloqueante na inicialização de notícias: {}", e.getMessage());
             }
@@ -173,6 +183,15 @@ public class NewsIngestionService {
             } catch (Exception e) {
                 log.warn("Erro ao processar feed '{}' ({}): {}", source.name(), source.url(), e.getMessage());
             }
+        }
+        if (totalImported > 0) {
+            Thread.ofVirtual().start(() -> {
+                try {
+                    aiRagService.syncEmbeddings();
+                } catch (Exception ex) {
+                    log.warn("Falha não bloqueante na sincronização pós-ingestão de embeddings RAG: {}", ex.getMessage());
+                }
+            });
         }
         return totalImported;
     }
