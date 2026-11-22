@@ -31,4 +31,13 @@ public class AiAskResponse {
 
     @Schema(description = "Tempo total de processamento em milissegundos")
     private long tempoRespostaMs;
+
+    @Schema(description = "True quando a cota gratuita da IA acabou e a resposta foi montada só com os dados salvos")
+    private boolean limiteAtingido;
+
+    @Schema(description = "Capitais cujos dados medidos (alertas e previsões) entraram no contexto")
+    private List<String> cidadesConsultadas;
+
+    @Schema(description = "Período das notícias usadas, ex.: 18/11 a 21/11")
+    private String periodoFontes;
 }

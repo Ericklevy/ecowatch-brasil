@@ -2,36 +2,25 @@ name: CI - Testes Automatizados
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  test-services:
-    name: Testar ${{ matrix.service }}
+  testes:
+    name: Testes do ${{ matrix.servico }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - alert-service
-          - analytics-service
-          - data-ingestion-service
-          - notification-service
-          - read-model-service
-
+        servico: [alert-service, analytics-service, data-ingestion-service, notification-service, read-model-service]
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
-
-      - name: Configurar Java 21 (Temurin)
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '21'
-          distribution: 'temurin'
           cache: maven
-
-      - name: Rodar Testes Unitários
-        run: |
-          cd ${{ matrix.service }}
-          mvn test -B
+      - name: Testes do ${{ matrix.servico }}
+        working-directory: ${{ matrix.servico }}
+        run: mvn -B -ntp test

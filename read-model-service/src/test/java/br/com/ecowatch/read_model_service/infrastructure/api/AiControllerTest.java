@@ -107,4 +107,10 @@ class AiControllerTest {
                 .andExpect(jsonPath("$.totalNoticias").value(35))
                 .andExpect(jsonPath("$.geminiConfigurado").value(true));
     }
+
+    @org.junit.jupiter.api.Test
+    void syncSemChaveDeAdminEhRecusado() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/sync")).andExpect(status().isForbidden());
+        Mockito.verify(aiRagService, Mockito.never()).syncEmbeddings();
+    }
 }

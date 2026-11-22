@@ -24,6 +24,9 @@ public class AiController {
 
     private final AiRagService aiRagService;
 
+    @org.springframework.beans.factory.annotation.Value("${ai.admin-key:${AI_ADMIN_KEY:}}")
+    private String adminKey;
+
     @Operation(
             summary = "Consultar o Assistente IA (RAG)",
             description = "Recebe uma pergunta em linguagem natural sobre o cenário climático, busca as notícias mais relevantes no banco vetorial e gera uma resposta fundamentada com citações das fontes oficiais."
@@ -52,7 +55,15 @@ public class AiController {
             description = "Varre o banco de notícias ambientais e gera os embeddings para as matérias que ainda não foram indexadas."
     )
     @PostMapping("/sync")
-    public ResponseEntity<Map<String, Object>> syncEmbeddings() {
+    public ResponseEntity<Map<String, Object>> syncEmbeddings(
+            @RequestHeader(value = "X-Admin-Key", required = false) String chave) {
+        // A indexação gasta cota do Gemini: só o dono chama (a coleta de notícias já sincroniza sozinha)
+        if (adminKey == null || adminKey.isBlank() || chave == null
+                || !java.security.MessageDigest.isEqual(adminKey.trim().getBytes(), chave.trim().getBytes())) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "success", false,
+                    "message", "A indexação roda automaticamente após cada coleta de notícias."));
+        }
         int count = aiRagService.syncEmbeddings();
         return ResponseEntity.ok(Map.of(
                 "success", true,
