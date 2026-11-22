@@ -15,7 +15,7 @@ class AiRagServiceGeminiLiveTest {
         String apiKey = System.getenv("GEMINI_API_KEY");
         assertNotNull(apiKey, "GEMINI_API_KEY deve estar configurada no ambiente para o teste de integração");
 
-        AiRagService service = new AiRagService(null, null, null, null);
+        AiRagService service = new AiRagService(null, null, null, null, null);
         ReflectionTestUtils.setField(service, "geminiApiKey", apiKey);
         ReflectionTestUtils.setField(service, "geminiModel", "gemini-flash-lite-latest");
         ReflectionTestUtils.setField(service, "embeddingModel", "gemini-embedding-001");

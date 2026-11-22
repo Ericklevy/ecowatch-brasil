@@ -191,20 +191,78 @@ public class EmissoesService {
 
         return entidades.stream()
                 .limit(limite)
-                .map(e -> FonteEmissaoDTO.builder()
-                        .assetId(e.getAssetId())
-                        .nome(e.getNome())
-                        .setor(e.getSetor())
-                        .subSetor(e.getSubSetor())
-                        .setorRotulo(ClimateTraceIngestionService.traduzirSetor(e.getSetor()))
-                        .latitude(e.getLatitude())
-                        .longitude(e.getLongitude())
-                        .gas(e.getGas())
-                        .emissaoAnualT(Math.round(e.getEmissaoT() * 100.0) / 100.0)
-                        .ano(e.getAno())
-                        .credito("Climate TRACE (CC BY 4.0)")
-                        .build())
+                .map(this::converterParaFonteDTO)
                 .collect(Collectors.toList());
+    }
+
+    public List<FonteEmissaoDTO> getFontesEmissaoPorEstado(String gasParam, String ufParam, Integer limiteParam) {
+        String gas = normalizarGas(gasParam);
+        int limite = (limiteParam != null && limiteParam > 0) ? Math.min(limiteParam, 50) : 5;
+        String uf = (ufParam != null && !ufParam.isBlank() && !"ALL".equalsIgnoreCase(ufParam)) ? ufParam.trim().toUpperCase() : null;
+
+        List<br.com.ecowatch.read_model_service.infrastructure.entity.EmissorClimateTraceEntity> todas =
+                climateTraceRepository.findTopEmissores(gas, null);
+
+        if (uf == null) {
+            return todas.stream().limit(limite).map(this::converterParaFonteDTO).collect(Collectors.toList());
+        }
+
+        return todas.stream()
+                .filter(e -> pertenceAoEstado(e, uf))
+                .limit(limite)
+                .map(this::converterParaFonteDTO)
+                .collect(Collectors.toList());
+    }
+
+    private FonteEmissaoDTO converterParaFonteDTO(br.com.ecowatch.read_model_service.infrastructure.entity.EmissorClimateTraceEntity e) {
+        return FonteEmissaoDTO.builder()
+                .assetId(e.getAssetId())
+                .nome(e.getNome())
+                .setor(e.getSetor())
+                .subSetor(e.getSubSetor())
+                .setorRotulo(ClimateTraceIngestionService.traduzirSetor(e.getSetor()))
+                .latitude(e.getLatitude())
+                .longitude(e.getLongitude())
+                .gas(e.getGas())
+                .emissaoAnualT(Math.round(e.getEmissaoT() * 100.0) / 100.0)
+                .ano(e.getAno())
+                .credito("Climate TRACE (CC BY 4.0)")
+                .build();
+    }
+
+    private boolean pertenceAoEstado(br.com.ecowatch.read_model_service.infrastructure.entity.EmissorClimateTraceEntity e, String uf) {
+        double lat = e.getLatitude();
+        double lon = e.getLongitude();
+        return switch (uf) {
+            case "PA" -> lat >= -9.9 && lat <= 2.6 && lon >= -58.9 && lon <= -46.0;
+            case "AM" -> lat >= -9.9 && lat <= 2.3 && lon >= -73.8 && lon <= -56.1;
+            case "MT" -> lat >= -18.1 && lat <= -7.3 && lon >= -61.6 && lon <= -50.1;
+            case "RO" -> lat >= -13.7 && lat <= -7.9 && lon >= -66.6 && lon <= -59.8;
+            case "SP" -> lat >= -25.3 && lat <= -19.7 && lon >= -53.1 && lon <= -44.1;
+            case "RJ" -> lat >= -23.4 && lat <= -20.7 && lon >= -44.9 && lon <= -40.9;
+            case "MG" -> lat >= -22.9 && lat <= -14.2 && lon >= -51.1 && lon <= -39.8;
+            case "ES" -> lat >= -21.3 && lat <= -17.9 && lon >= -41.9 && lon <= -39.6;
+            case "RS" -> lat >= -33.8 && lat <= -27.1 && lon >= -57.7 && lon <= -49.7;
+            case "BA" -> lat >= -18.4 && lat <= -8.5 && lon >= -46.6 && lon <= -37.3;
+            case "MS" -> lat >= -24.1 && lat <= -17.1 && lon >= -58.2 && lon <= -50.9;
+            case "GO" -> lat >= -19.5 && lat <= -12.3 && lon >= -53.3 && lon <= -45.9;
+            case "MA" -> lat >= -10.3 && lat <= -1.0 && lon >= -48.8 && lon <= -41.8;
+            case "CE" -> lat >= -7.9 && lat <= -2.7 && lon >= -41.5 && lon <= -37.2;
+            case "PE" -> lat >= -9.5 && lat <= -7.1 && lon >= -41.4 && lon <= -34.8;
+            case "PR" -> lat >= -26.7 && lat <= -22.5 && lon >= -54.7 && lon <= -48.0;
+            case "SC" -> lat >= -29.4 && lat <= -25.9 && lon >= -53.9 && lon <= -48.3;
+            case "TO" -> lat >= -13.5 && lat <= -5.1 && lon >= -50.8 && lon <= -45.7;
+            case "PI" -> lat >= -10.9 && lat <= -2.7 && lon >= -46.0 && lon <= -40.3;
+            case "RN" -> lat >= -6.9 && lat <= -4.8 && lon >= -38.6 && lon <= -34.9;
+            case "PB" -> lat >= -8.3 && lat <= -6.0 && lon >= -38.8 && lon <= -34.7;
+            case "AL" -> lat >= -10.5 && lat <= -8.8 && lon >= -38.3 && lon <= -35.1;
+            case "SE" -> lat >= -11.6 && lat <= -9.5 && lon >= -38.3 && lon <= -36.4;
+            case "AC" -> lat >= -11.2 && lat <= -7.1 && lon >= -73.9 && lon <= -66.6;
+            case "AP" -> lat >= -1.3 && lat <= 4.5 && lon >= -54.9 && lon <= -49.8;
+            case "RR" -> lat >= -1.6 && lat <= 5.3 && lon >= -64.8 && lon <= -58.9;
+            case "DF" -> lat >= -16.1 && lat <= -15.4 && lon >= -48.3 && lon <= -47.3;
+            default -> false;
+        };
     }
 
     private int resolverUltimoAno(String gas) {

@@ -33,6 +33,7 @@ public class AiRagService {
     private final JdbcTemplate jdbcTemplate;
     private final NewsRepository newsRepository;
     private final DashboardService dashboardService;
+    private final EmissoesService emissoesService;
     private final br.com.ecowatch.read_model_service.infrastructure.config.RagDatabaseInitializer ragDatabaseInitializer;
 
     /** Quando o Gemini responde 429 (cota grátis acabou), evitamos novas chamadas até este horário. */
@@ -68,6 +69,62 @@ public class AiRagService {
             Map.entry("Porto Velho", "RO"), Map.entry("Boa Vista", "RR"), Map.entry("Florianópolis", "SC"),
             Map.entry("São Paulo", "SP"), Map.entry("Aracaju", "SE"), Map.entry("Palmas", "TO")
     );
+
+    static final Map<String, String> ESTADOS_MAP = new LinkedHashMap<>();
+    static {
+        Map<String, String> m = Map.ofEntries(
+                Map.entry("acre", "AC"), Map.entry("alagoas", "AL"), Map.entry("amapa", "AP"),
+                Map.entry("amazonas", "AM"), Map.entry("bahia", "BA"), Map.entry("ceara", "CE"),
+                Map.entry("distrito federal", "DF"), Map.entry("espirito santo", "ES"), Map.entry("goias", "GO"),
+                Map.entry("maranhao", "MA"), Map.entry("mato grosso do sul", "MS"), Map.entry("mato grosso", "MT"),
+                Map.entry("minas gerais", "MG"), Map.entry("para", "PA"), Map.entry("paraiba", "PB"),
+                Map.entry("parana", "PR"), Map.entry("pernambuco", "PE"), Map.entry("piaui", "PI"),
+                Map.entry("rio de janeiro", "RJ"), Map.entry("rio grande do norte", "RN"), Map.entry("rio grande do sul", "RS"),
+                Map.entry("rondonia", "RO"), Map.entry("roraima", "RR"), Map.entry("santa catarina", "SC"),
+                Map.entry("sao paulo", "SP"), Map.entry("sergipe", "SE"), Map.entry("tocantins", "TO")
+        );
+        for (var e : m.entrySet()) {
+            ESTADOS_MAP.put(CityNameNormalizer.normalize(e.getKey()), e.getValue());
+        }
+    }
+
+    public static boolean isEmissoesQuery(String query) {
+        if (query == null) return false;
+        String q = CityNameNormalizer.normalize(query).toLowerCase();
+        return q.contains("emissao") || q.contains("emissoes") || q.contains("emite")
+                || q.contains("metano") || q.contains("ch4")
+                || q.contains("co2") || q.contains("carbono")
+                || q.contains("efeito estufa") || q.contains("gases")
+                || q.contains("gas de efeito") || q.contains("seeg")
+                || q.contains("climatetrace") || q.contains("climate trace");
+    }
+
+    public static String detectarGas(String query) {
+        if (query == null) return "CO2e";
+        String q = CityNameNormalizer.normalize(query).toLowerCase();
+        if (q.contains("metano") || q.contains("ch4")) return "CH4";
+        if (q.contains("co2") || q.contains("carbono")) return "CO2e";
+        return "CO2e";
+    }
+
+    public static String detectarEstado(String texto, String estadoRequest) {
+        if (estadoRequest != null && !estadoRequest.isBlank() && !"ALL".equalsIgnoreCase(estadoRequest)) {
+            return estadoRequest.trim().toUpperCase();
+        }
+        if (texto == null) return null;
+        String norm = " " + CityNameNormalizer.normalize(texto).replaceAll("[^a-z0-9 ]", " ") + " ";
+        for (var e : ESTADOS_MAP.entrySet()) {
+            if (norm.contains(" " + e.getKey() + " ")) {
+                return e.getValue();
+            }
+        }
+        for (String uf : CAPITAL_UF.values()) {
+            if (norm.contains(" " + uf.toLowerCase() + " ")) {
+                return uf;
+            }
+        }
+        return null;
+    }
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
@@ -113,40 +170,43 @@ public class AiRagService {
             }
         }
 
-        // 2. Inferência de estado: se o estado não foi passado explicitamente, deduz da capital detectada
-        String estadoEfetivo = request.getEstado();
+        // 2. Inferência de estado: verifica se citou estado por extenso/sigla ou deduz da capital
+        String estadoEfetivo = detectarEstado(pergunta, request.getEstado());
         if ((estadoEfetivo == null || estadoEfetivo.isBlank() || "all".equalsIgnoreCase(estadoEfetivo)) && !cidades.isEmpty()) {
             estadoEfetivo = CAPITAL_UF.get(cidades.get(0));
         }
 
-        // 3. Embedding da pergunta (se o Gemini estiver disponível e com cota)
+        // 3. Contexto específico de Gases de Efeito Estufa e Emissões (SEEG, Climate TRACE, CAMS)
+        String contextoEmissoes = montarContextoEmissoes(pergunta, cidades, estadoEfetivo);
+
+        // 4. Embedding da pergunta (se o Gemini estiver disponível e com cota)
         String queryVectorStr = podeUsarGemini() ? generateEmbedding(pergunta) : null;
 
-        // 4. Notícias parecidas com corte estrito de similaridade, filtro por estado e decaimento temporal
+        // 5. Notícias parecidas com corte estrito de similaridade, filtro por estado e decaimento temporal
         List<RagSourceItem> fontes = searchSimilarNews(pergunta, queryVectorStr, request.getCategoria(), estadoEfetivo, topK);
 
-        // 4. Resposta
+        // 6. Resposta
         String respostaFinal;
         String modeloUtilizado;
         boolean limiteAtingido = false;
 
-        if (fontes.isEmpty() && dados.isEmpty()) {
+        if (fontes.isEmpty() && dados.isEmpty() && contextoEmissoes.isBlank()) {
             respostaFinal = "Não encontrei notícias nem dados medidos no EcoWatch que respondam a essa pergunta. "
                     + "Tente citar uma capital (ex.: *Como está o risco de incêndio em Cuiabá?*) ou usar outros termos.";
             modeloUtilizado = "ecowatch-rag-empty";
         } else if (podeUsarGemini()) {
-            String llm = generateLlmAnswer(pergunta, fontes, dados, request.getHistorico());
+            String llm = generateLlmAnswer(pergunta, fontes, dados, contextoEmissoes, request.getHistorico());
             if (llm != null) {
                 respostaFinal = llm;
                 modeloUtilizado = geminiModel;
             } else {
                 limiteAtingido = cotaEsgotada();
-                respostaFinal = (limiteAtingido ? AVISO_LIMITE : "") + generateFactualSummary(fontes, dados);
+                respostaFinal = (limiteAtingido ? AVISO_LIMITE : "") + generateFactualSummary(fontes, dados, contextoEmissoes);
                 modeloUtilizado = "ecowatch-rag-synthesizer";
             }
         } else {
             limiteAtingido = cotaEsgotada();
-            respostaFinal = (limiteAtingido ? AVISO_LIMITE : "") + generateFactualSummary(fontes, dados);
+            respostaFinal = (limiteAtingido ? AVISO_LIMITE : "") + generateFactualSummary(fontes, dados, contextoEmissoes);
             modeloUtilizado = "ecowatch-rag-synthesizer";
         }
 
@@ -214,6 +274,156 @@ public class AiRagService {
     private void registrarCotaEsgotada() {
         cotaEsgotadaAte = Instant.now().plus(PAUSA_COTA);
         log.warn("Cota do Gemini esgotada (429). Pausando chamadas por {} min.", PAUSA_COTA.toMinutes());
+    }
+
+    record GasesAtmosfericos(Double metano, Double co2, Double co) {}
+
+    private final Map<String, GasesAtmosfericos> cacheGases = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private GasesAtmosfericos consultarGasesAtmosfericos(String capital) {
+        PrevisaoRealService.Capital capCoord = PrevisaoRealService.CAPITAIS.stream()
+                .filter(c -> c.municipio().equalsIgnoreCase(CityNameNormalizer.normalize(capital)))
+                .findFirst().orElse(null);
+
+        if (capCoord == null) return null;
+
+        if (cacheGases.containsKey(capital)) {
+            return cacheGases.get(capital);
+        }
+
+        try {
+            String url = String.format(Locale.US,
+                    "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=%.4f&longitude=%.4f&current=methane,carbon_dioxide,carbon_monoxide",
+                    capCoord.lat(), capCoord.lon());
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(3))
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                JsonNode root = objectMapper.readTree(resp.body());
+                JsonNode current = root.path("current");
+                Double metano = current.has("methane") ? current.path("methane").asDouble() : null;
+                Double co2 = current.has("carbon_dioxide") ? current.path("carbon_dioxide").asDouble() : null;
+                Double co = current.has("carbon_monoxide") ? current.path("carbon_monoxide").asDouble() : null;
+
+                GasesAtmosfericos gases = new GasesAtmosfericos(metano, co2, co);
+                cacheGases.put(capital, gases);
+                return gases;
+            }
+        } catch (Exception e) {
+            log.debug("Aviso ao consultar gases atmosféricos para {}: {}", capital, e.getMessage());
+        }
+        return null;
+    }
+
+    public String montarContextoEmissoes(String pergunta, List<String> capitais, String ufAlvo) {
+        if (!isEmissoesQuery(pergunta)) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        String gas = detectarGas(pergunta);
+        String gasRotulo = "CH4".equalsIgnoreCase(gas) ? "Metano (CH₄)" : "CO₂ equivalente (CO₂e)";
+
+        sb.append("=== DADOS OFICIAIS DE GASES E EMISSÕES (SEEG & CLIMATE TRACE) ===\n");
+        sb.append("Gás foco da consulta: ").append(gasRotulo).append("\n\n");
+
+        // 1. Capitais citadas: Concentração Atmosférica Atual (Open-Meteo) + Série SEEG (Fase 1 e 2)
+        if (!capitais.isEmpty()) {
+            for (String cap : capitais) {
+                sb.append("--- CAPITAL: ").append(cap.toUpperCase()).append(" ---\n");
+
+                // Concentração no ar hoje (CAMS/Open-Meteo)
+                GasesAtmosfericos gases = consultarGasesAtmosfericos(cap);
+                if (gases != null) {
+                    sb.append("• Concentração no ar hoje (Fonte: Copernicus CAMS / Open-Meteo, leitura regional): ");
+                    List<String> partes = new ArrayList<>();
+                    if (gases.metano != null) partes.add(String.format(Locale.forLanguageTag("pt-BR"), "CH₄: %.0f µg/m³", gases.metano));
+                    if (gases.co2 != null) partes.add(String.format(Locale.forLanguageTag("pt-BR"), "CO₂: %.0f ppm", gases.co2));
+                    if (gases.co != null) partes.add(String.format(Locale.forLanguageTag("pt-BR"), "CO: %.0f µg/m³", gases.co));
+                    sb.append(String.join(", ", partes)).append("\n");
+                    sb.append("  (Nota: concentração no ar mede a dispersão atmosférica na região e não indica quem emite).\n");
+                } else {
+                    sb.append("• Concentração no ar hoje: sem dado em tempo real no momento (limite da API regional atingido).\n");
+                }
+
+                // Série SEEG do município
+                try {
+                    EmissoesDTO.MunicipioDetalheDTO det = emissoesService.getMunicipioDetalhe(cap, gas);
+                    if (det != null && !det.getSerieHistorica().isEmpty()) {
+                        sb.append(String.format("• Histórico de Emissões Municipais (Fonte: SEEG / Observatório do Clima, Coleção 14.0):\n"));
+                        sb.append(String.format("  - Setor dominante de emissão em %s: %s (%s)\n", cap, det.getSetorDominante(), det.getExplicacaoSetorDominante()));
+                        for (EmissoesDTO.SerieAnoDTO anoItem : det.getSerieHistorica()) {
+                            sb.append(String.format(Locale.forLanguageTag("pt-BR"), "  - Ano %d: %,.1f t de %s", anoItem.getAno(), anoItem.getEmissaoTotal(), gas));
+                            if (anoItem.getQuebraPorSetor() != null && !anoItem.getQuebraPorSetor().isEmpty()) {
+                                String quebraStr = anoItem.getQuebraPorSetor().entrySet().stream()
+                                        .map(s -> String.format(Locale.forLanguageTag("pt-BR"), "%s: %,.0f t", s.getKey(), s.getValue()))
+                                        .collect(Collectors.joining("; "));
+                                sb.append(" [").append(quebraStr).append("]");
+                            }
+                            sb.append("\n");
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.debug("Erro ao carregar SEEG para {}: {}", cap, ex.getMessage());
+                }
+                sb.append("\n");
+            }
+        }
+
+        // 2. Ranking do Estado (SEEG Top 5) se estado citado ou capital detectada
+        String estadoConsulta = ufAlvo;
+        if ((estadoConsulta == null || estadoConsulta.isBlank()) && !capitais.isEmpty()) {
+            estadoConsulta = CAPITAL_UF.get(capitais.get(0));
+        }
+
+        if (estadoConsulta != null && !estadoConsulta.isBlank()) {
+            sb.append(String.format("--- TOP 5 MUNICÍPIOS QUE MAIS EMITEM EM %s (Fonte: SEEG 14.0, Ano recente) ---\n", estadoConsulta));
+            try {
+                List<EmissoesDTO.RankingMunicipioItem> ranking = emissoesService.getRanking(gas, estadoConsulta, null, 5);
+                if (!ranking.isEmpty()) {
+                    for (int i = 0; i < ranking.size(); i++) {
+                        EmissoesDTO.RankingMunicipioItem item = ranking.get(i);
+                        sb.append(String.format(Locale.forLanguageTag("pt-BR"),
+                                "%d. %s (%s): %,.1f t de %s/ano | Setor principal: %s (%.1f%%) | %s\n",
+                                i + 1, item.getMunicipio(), item.getUf(), item.getEmissaoTotal(), item.getGas(),
+                                item.getSetorPrincipal(), item.getPercentualSetorPrincipal(), item.getExplicacaoSetor()));
+                    }
+                } else {
+                    sb.append("Sem dados de ranking para este estado.\n");
+                }
+            } catch (Exception ex) {
+                log.debug("Erro ao carregar ranking de estado {}: {}", estadoConsulta, ex.getMessage());
+            }
+            sb.append("\n");
+
+            // 3. Top 5 Fontes Pontuais do Climate TRACE no estado
+            sb.append(String.format("--- TOP FONTES PONTUAIS EM %s (Fonte: Climate TRACE, CC BY 4.0) ---\n", estadoConsulta));
+            try {
+                List<EmissoesDTO.FonteEmissaoDTO> fontesTrace = emissoesService.getFontesEmissaoPorEstado(gas, estadoConsulta, 5);
+                if (!fontesTrace.isEmpty()) {
+                    for (int i = 0; i < fontesTrace.size(); i++) {
+                        EmissoesDTO.FonteEmissaoDTO f = fontesTrace.get(i);
+                        sb.append(String.format(Locale.forLanguageTag("pt-BR"),
+                                "%d. %s [%s - %s]: %,.1f t/ano (Ano %d)\n",
+                                i + 1, f.getNome(), f.getSetorRotulo(), f.getSubSetor() != null ? f.getSubSetor() : "instalação",
+                                f.getEmissaoAnualT(), f.getAno()));
+                    }
+                } else {
+                    sb.append(String.format("Nenhuma grande fonte pontual do top nacional do Climate TRACE localizada diretamente em %s.\n", estadoConsulta));
+                }
+            } catch (Exception ex) {
+                log.debug("Erro ao carregar fontes Climate TRACE: {}", ex.getMessage());
+            }
+            sb.append("\n");
+        }
+
+        return sb.toString();
     }
 
     private String contextoDados(Map<String, DashboardDTO> dados) {
@@ -405,7 +615,7 @@ public class AiRagService {
      * Envia o contexto das notícias recuperadas para o modelo Gemini formular a resposta final.
      */
     private String generateLlmAnswer(String pergunta, List<RagSourceItem> fontes, Map<String, DashboardDTO> dados,
-                                     List<AiAskRequest.HistoricoItem> historico) {
+                                     String contextoEmissoes, List<AiAskRequest.HistoricoItem> historico) {
         try {
             StringBuilder contextBuilder = new StringBuilder();
             for (int i = 0; i < fontes.size(); i++) {
@@ -443,13 +653,23 @@ public class AiRagService {
             String prompt = String.format("""
                 Você é o EcoWatch AI, assistente de monitoramento climático e de desastres ambientais no Brasil.
 
-                REGRAS:
+                REGRAS GERAIS:
                 1. Responda em português do Brasil, de forma clara e direta (no máximo uns 3 parágrafos curtos ou uma lista).
                 2. Use SOMENTE as informações do CONTEXTO abaixo. Se o contexto não responde, diga isso com honestidade.
                 3. Quando usar DADOS MEDIDOS, diga que são do monitoramento do EcoWatch e informe a data.
                 4. Quando usar NOTÍCIAS, cite a fonte e a data (ex.: "segundo a Defesa Civil, em 20/11").
                 5. Em situação de risco, oriente a seguir a Defesa Civil local (telefone 199).
                 6. Pode usar **negrito** e listas com "- ".
+
+                REGRAS OBRIGATÓRIAS PARA GASES DE EFEITO ESTUFA E EMISSÕES:
+                - DIFERENCIAÇÃO FUNDAMENTAL:
+                  * "Concentração atmosférica no ar" (modelo Copernicus CAMS / Open-Meteo, leitura recente, em µg/m³ ou ppm) mede a qualidade física do ar disperso e NÃO indica quem emite.
+                  * "Emissões anuais" (SEEG por município ou Climate TRACE por instalação, em toneladas de CO₂e ou CH₄) indicam o quanto de gás é lançado na atmosfera pelo município ou fábrica.
+                - SEMPRE cite a fonte e o ano de cada dado (ex.: "Segundo o SEEG (2023)...", "De acordo com o Climate TRACE (2024)...", "Pelo modelo Copernicus CAMS hoje...").
+                - NUNCA invente números de emissões ou concentrações. Se o dado não existir, diga com clareza.
+
+                DADOS DE EMISSÕES E GASES (SEEG, CLIMATE TRACE E COPERNICUS CAMS):
+                %s
 
                 DADOS MEDIDOS PELO ECOWATCH (alertas e previsões das capitais citadas):
                 %s
@@ -462,7 +682,8 @@ public class AiRagService {
 
                 PERGUNTA:
                 %s
-                """, dados.isEmpty() ? "(nenhuma capital citada)" : contextoDados(dados),
+                """, contextoEmissoes == null || contextoEmissoes.isBlank() ? "(nenhuma consulta de emissão/gases)" : contextoEmissoes,
+                    dados.isEmpty() ? "(nenhuma capital citada)" : contextoDados(dados),
                     contextBuilder.isEmpty() ? "(nenhuma notícia relevante)" : contextBuilder,
                     conversa.isEmpty() ? "(início da conversa)" : conversa, pergunta);
 
@@ -517,8 +738,13 @@ public class AiRagService {
     /**
      * Síntese factual inteligente sem alucinações para quando não há LLM externo ou a chave não foi definida.
      */
-    private String generateFactualSummary(List<RagSourceItem> fontes, Map<String, DashboardDTO> dados) {
+    private String generateFactualSummary(List<RagSourceItem> fontes, Map<String, DashboardDTO> dados, String contextoEmissoes) {
         StringBuilder sb = new StringBuilder();
+        if (contextoEmissoes != null && !contextoEmissoes.isBlank()) {
+            sb.append("**Monitoramento de Gases e Emissões:**\n\n")
+              .append(contextoEmissoes.replace("--- ", "**").replace(" ---", "**\n"))
+              .append("\n");
+        }
         if (!dados.isEmpty()) {
             sb.append("**Dados medidos pelo EcoWatch:**\n\n").append(contextoDados(dados).replace("--- ", "**").replace(" ---", "**"));
         }
