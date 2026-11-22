@@ -34,6 +34,7 @@ O sistema coleta dados climáticos, qualidade do ar, focos de incêndio e nível
 - [Infraestrutura Cloud](#-infraestrutura-cloud)
 - [Segurança](#-segurança)
 - [Cidades Monitoradas](#-cidades-monitoradas)
+- [Gases e Emissões de Efeito Estufa](#-gases-e-emissões-de-efeito-estufa)
 - [Estrutura do Projeto](#-estrutura-do-projeto)
 - [Licença](#-licença)
 
@@ -379,6 +380,12 @@ curl http://localhost:8086/api/dashboard/brasilia
 | `GET` | `/api/dashboard/{municipio}` | Dados consolidados (alertas + previsões) da cidade |
 | `GET` | `/api/v1/news` | Feed paginado de notícias oficiais de desastres (`page`, `size`, `categoria`, `estado`, `municipio`) |
 | `POST` | `/api/v1/news/cleanup` | Dispara expurgo imediato de ruídos e reclassificação de notícias |
+| `POST` | `/api/v1/ai/ask` | Consulta à IA Gota (RAG) com contexto de clima, riscos, notícias e emissões |
+| `GET` | `/api/v1/ai/status` | Diagnóstico da infraestrutura de IA e embeddings pgvector |
+| `GET` | `/api/emissoes/ranking` | Ranking de municípios que mais emitem (SEEG) por gás e UF |
+| `GET` | `/api/emissoes/estados` | Total de emissões consolidadas por estado/UF (SEEG) |
+| `GET` | `/api/emissoes/municipio/{nome}` | Série histórica de 5 anos e quebra setorial de um município (SEEG) |
+| `GET` | `/api/emissoes/fontes` | Top fontes pontuais georreferenciadas de emissão (Climate TRACE) |
 | `GET` | `/swagger-ui/index.html` | Swagger UI |
 | `GET` | `/v3/api-docs` | Documentação OpenAPI |
 
@@ -520,9 +527,35 @@ O sistema monitora **todas as 27 capitais brasileiras** (26 estados + Distrito F
 | 🌧️ Precipitação | NASA Power / Open-Meteo | Volume de chuva em mm |
 | 🌫️ PM2.5 | Open-Meteo Air Quality | Material particulado fino (µg/m³) |
 | 🌫️ PM10 | Open-Meteo Air Quality | Material particulado grosso (µg/m³) |
+| 💨 Metano (CH₄) | Open-Meteo / Copernicus CAMS | Concentração atmosférica de metano (µg/m³) |
+| 💨 Dióxido de Carbono (CO₂) | Open-Meteo / Copernicus CAMS | Concentração atmosférica de CO₂ (ppm) |
+| 💨 Monóxido de Carbono (CO) | Open-Meteo / Copernicus CAMS | Concentração atmosférica de CO (µg/m³) |
 | 🔥 Focos de Incêndio | INPE BDQueimadas | Contagem de focos ativos |
 | 🌊 Nível do Rio | ANA HidroWeb | Nível hidrométrico em metros |
 | ⚠️ Alerta Enxurrada | CEMADEN | Flag booleano de risco |
+
+---
+
+## 🌍 Gases e Emissões de Efeito Estufa
+
+O EcoWatch Brasil integra três fontes públicas complementares para fornecer uma visão abrangente sobre gases de efeito estufa (GEE) no Brasil — diferenciando com rigor metodológico **concentração atmosférica** de **emissão bruta na fonte**:
+
+| Camada / Dimensão | Fonte Oficial | Escopo & Variáveis | Frequência de Atualização | Licença de Uso |
+|---|---|---|---|---|
+| **Concentração Atmosférica (Tempo Quase-Real)** | **Copernicus CAMS** (via Open-Meteo Air Quality API) | CH₄ (Metano em $\mu g/m^3$), CO₂ (Dióxido de Carbono em ppm), CO ($\mu g/m^3$) nas 27 capitais brasileiras | Horária / Atualização diária contínua | [Open-Meteo Non-Commercial / Copernicus CAMS License](https://open-meteo.com/en/terms) |
+| **Inventário Municipal de Emissões** | **SEEG 14.0** (Sistema de Estimativas de Emissões de Gases de Efeito Estufa - Observatório do Clima) | Emissões brutas em toneladas ($t$) dos últimos 5 anos (2019-2023) por município e UF para CO₂e, CH₄, CO₂ e N₂O, divididos pelos 5 setores oficiais (Agropecuária, Mudança de Uso da Terra, Energia, Processos Industriais, Resíduos) | Anual (publicação oficial pelo Observatório do Clima) | [Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)](https://seeg.eco.br) |
+| **Grandes Emissores Pontuais** | **Climate TRACE v6** (Climatempo / Al Gore Coalition) | Top 200 fontes pontuais ativas de emissão no Brasil com coordenadas georreferenciadas, setor (pecuária, aterros sanitários, usinas, refinarias, mineração), capacidade e emissões anuais de CO₂e e CH₄ | Mensal (sincronização via scheduler com defasagem de ~60 dias dos satélites) | [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://climatetrace.org/data) |
+
+### 🔍 Diferenças e Limitações Metodológicas
+
+1. **Concentração no Ar ≠ Emissão da Cidade:**
+   - A concentração atmosférica (Open-Meteo / Copernicus CAMS) reflete a quantidade do gás presente na coluna de ar naquele momento. Ela sofre influência direta de ventos, frentes meteorológicas e dispersão transfronteiriça. Uma capital pode apresentar alta concentração atmosférica de metano ou CO devido a massas de ar vindas de queimadas a centenas de quilômetros de distância, e não por emissão local.
+2. **SEEG (Inventário Territorial Municipal):**
+   - Os dados do SEEG são estimativas consolidadas baseadas na metodologia do IPCC e balanços energéticos/agropecuários oficiais. O dado é anual e retrospectivo (o ano mais recente é 2023), representando a emissão atribuída a todo o território daquele município.
+3. **Climate TRACE (Fontes Pontuais Rastreadas por Satélite/IA):**
+   - Concentra-se em grandes ativos individuais (como aterros sanitários de capitais, grandes confinamentos de gado, usinas termelétricas e indústrias). Nem todas as emissões difusas de um município estão no Climate TRACE, mas sim os principais grandes pontos de emissão detectados.
+4. **Segurança e Isolamento no Banco:**
+   - As tabelas `emissoes_municipio` e `emissores_climatetrace` contam com Row Level Security (RLS) habilitado no Supabase/PostgreSQL, com acesso restrito e seguro gerenciado pelo microsserviço `read-model-service`.
 
 ---
 
@@ -640,6 +673,35 @@ ecowatch-brasil/
 | `municipio` | `VARCHAR(100)` | Município identificado (ou null se regional) |
 | `estado` | `VARCHAR(2)` | Sigla UF identificada (ou null se nacional) |
 | `created_at` | `TIMESTAMP` | Data/hora da ingestão no sistema |
+
+### Tabela `emissoes_municipio`
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | `BIGSERIAL` (PK) | Identificador auto-incremento |
+| `codigo_ibge` | `VARCHAR(10)` | Código oficial do município (IBGE) |
+| `municipio` | `VARCHAR(120)` | Nome do município |
+| `uf` | `VARCHAR(2)` | Sigla da unidade federativa |
+| `ano` | `INT` | Ano de referência (2019 a 2023) |
+| `gas` | `VARCHAR(20)` | Gás inventariado (`CO2e`, `CH4`, `CO2`, `N2O`) |
+| `setor` | `VARCHAR(60)` | Setor econômico gerador da emissão |
+| `emissao_t` | `NUMERIC(14,2)` | Volume total emitido em toneladas ($t$) |
+
+### Tabela `emissores_climatetrace`
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | `BIGSERIAL` (PK) | Identificador auto-incremento |
+| `asset_id` | `VARCHAR(50)` | Identificador único do ativo na Climate TRACE |
+| `nome` | `VARCHAR(255)` | Nome da fonte ou instalação |
+| `setor` | `VARCHAR(80)` | Categoria operacional (ex: agriculture, solid-waste, power) |
+| `sub_setor` | `VARCHAR(80)` | Subcategoria operacional detalhada |
+| `latitude` | `DOUBLE PRECISION` | Latitude georreferenciada da fonte |
+| `longitude` | `DOUBLE PRECISION` | Longitude georreferenciada da fonte |
+| `gas` | `VARCHAR(20)` | Gás mensurado (`CO2e`, `CH4`) |
+| `emissao_anual_t` | `NUMERIC(14,2)` | Emissão anual estimada em toneladas ($t$) |
+| `ano_dados` | `INT` | Ano de referência das estimativas |
+| `uf` | `VARCHAR(2)` | Estado de localização da instalação |
 
 ---
 
