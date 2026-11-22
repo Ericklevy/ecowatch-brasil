@@ -91,15 +91,17 @@ public class WeatherIngestionScheduler {
             log.info("⏸️ Sistema operando em modo 100% SOB DEMANDA. Coleta automática no startup desativada para economia de recursos.");
             return;
         }
-        log.info("🚀 Aplicação iniciada! Agendando coleta inicial em 15 segundos...");
-        try {
-            Thread.sleep(15_000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return;
-        }
-        log.info("🔄 Executando coleta inicial de dados climáticos...");
-        fetchAndPublishWeather();
+        Thread.ofVirtual().name("startup-ingestion").start(() -> {
+            log.info("🚀 Aplicação iniciada! Agendando coleta inicial em 15 segundos (em background)...");
+            try {
+                Thread.sleep(15_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            log.info("🔄 Executando coleta inicial de dados climáticos...");
+            fetchAndPublishWeather();
+        });
     }
 
     /**

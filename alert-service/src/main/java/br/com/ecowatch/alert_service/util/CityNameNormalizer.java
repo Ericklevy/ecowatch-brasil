@@ -11,6 +11,6 @@ public class CityNameNormalizer {
             return "";
         }
         String normalized = Normalizer.normalize(name.trim(), Normalizer.Form.NFD);
-        return normalized.replaceAll("\\p{M}", "").toLowerCase();
+        return normalized.replaceAll("\\p{M}", "").replace("-", " ").toLowerCase();
     }
 }

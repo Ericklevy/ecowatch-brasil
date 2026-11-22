@@ -1,6 +1,7 @@
 package br.com.ecowatch.alert_service.infrastructure.cache;
 
 import br.com.ecowatch.alert_service.domain.model.WeatherReading;
+import br.com.ecowatch.alert_service.util.CityNameNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,13 +20,11 @@ public class WeatherCacheService {
     private final ObjectMapper objectMapper;
 
     private static final String KEY_PREFIX = "weather:";
-    private static final Duration TTL = Duration.ofHours(3);
-
-
+    private static final Duration TTL = Duration.ofHours(14);
 
     public void saveLastReading(WeatherReading reading) {
         try {
-            String key = KEY_PREFIX + reading.municipio().toLowerCase();
+            String key = KEY_PREFIX + CityNameNormalizer.normalize(reading.municipio());
             String json = objectMapper.writeValueAsString(reading);
             redisTemplate.opsForValue().set(key, json, TTL);
             log.debug("💾 Leitura de {} salva no Redis", reading.municipio());
@@ -36,7 +35,7 @@ public class WeatherCacheService {
 
     public Optional<WeatherReading> getLastReading(String municipio) {
         try {
-            String key = KEY_PREFIX + municipio.toLowerCase();
+            String key = KEY_PREFIX + CityNameNormalizer.normalize(municipio);
             String json = redisTemplate.opsForValue().get(key);
             if (json != null) {
                 WeatherReading reading = objectMapper.readValue(json, WeatherReading.class);

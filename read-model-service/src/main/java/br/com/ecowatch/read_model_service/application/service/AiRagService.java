@@ -33,6 +33,7 @@ public class AiRagService {
     private final JdbcTemplate jdbcTemplate;
     private final NewsRepository newsRepository;
     private final DashboardService dashboardService;
+    private final br.com.ecowatch.read_model_service.infrastructure.config.RagDatabaseInitializer ragDatabaseInitializer;
 
     /** Quando o Gemini responde 429 (cota grátis acabou), evitamos novas chamadas até este horário. */
     private volatile Instant cotaEsgotadaAte = Instant.EPOCH;
@@ -77,6 +78,7 @@ public class AiRagService {
      * Responde a uma pergunta do usuário combinando busca vetorial nas notícias com IA generativa (RAG).
      */
     public AiAskResponse ask(AiAskRequest request) {
+        ragDatabaseInitializer.ensureInitialized();
         long startTime = System.currentTimeMillis();
         String pergunta = request.getPergunta().trim();
         int topK = request.getTopK() != null && request.getTopK() > 0 ? Math.min(request.getTopK(), 8) : 4;
@@ -541,6 +543,7 @@ public class AiRagService {
     static final int MAX_POR_SYNC = 200;
 
     public int syncEmbeddings() {
+        ragDatabaseInitializer.ensureInitialized();
         log.info("Iniciando sincronização de embeddings RAG...");
         int count = 0;
 

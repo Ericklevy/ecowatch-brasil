@@ -3,10 +3,14 @@ package br.com.ecowatch.read_model_service.infrastructure.config;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Slf4j
+@Lazy(false)
 @Component
 @RequiredArgsConstructor
 public class RagDatabaseInitializer {
@@ -15,10 +19,35 @@ public class RagDatabaseInitializer {
 
     /** Último problema encontrado ao preparar o pgvector (aparece em /api/v1/ai/status). */
     public static volatile String diagnostico = "não verificado";
+    private static volatile boolean initialized = false;
 
     @PostConstruct
-    public void init() {
+    @EventListener(ApplicationReadyEvent.class)
+    public synchronized void init() {
+        if (initialized && "ok".equals(diagnostico)) {
+            return;
+        }
         try {
+            // 0. Garante que a tabela noticias_ambientais exista antes de criar chaves estrangeiras
+            try {
+                jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS noticias_ambientais (
+                        id BIGSERIAL PRIMARY KEY,
+                        titulo VARCHAR(500) NOT NULL,
+                        resumo TEXT NOT NULL,
+                        fonte VARCHAR(100) NOT NULL,
+                        url VARCHAR(1000) UNIQUE NOT NULL,
+                        data_hora TIMESTAMP NOT NULL,
+                        categoria VARCHAR(20) NOT NULL,
+                        municipio VARCHAR(100),
+                        estado VARCHAR(2),
+                        data_criacao TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                """);
+            } catch (Exception ex) {
+                log.debug("Verificação prévia de noticias_ambientais: {}", ex.getMessage());
+            }
+
             // 1. Tenta ativar a extensão pgvector (nativa no Supabase)
             try {
                 jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector;");
@@ -58,6 +87,7 @@ public class RagDatabaseInitializer {
                 """);
                 log.info("✅ Tabela 'rag_noticias_embeddings' (pgvector 768d) pronta.");
                 diagnostico = "ok";
+                initialized = true;
             } catch (Exception ex) {
                 // Fallback para bancos sem tipo vector (ex: H2 em memória em testes de integração)
                 diagnostico = "tabela vetorial não criada: " + ex.getMessage();
@@ -72,6 +102,7 @@ public class RagDatabaseInitializer {
                         criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                     );
                 """);
+                initialized = true;
             }
 
             // 3. Índice vetorial de cosseno (se pgvector estiver disponível)
@@ -88,6 +119,12 @@ public class RagDatabaseInitializer {
 
         } catch (Exception e) {
             log.error("Erro geral na inicialização do RAG no banco: {}", e.getMessage());
+        }
+    }
+
+    public void ensureInitialized() {
+        if (!initialized) {
+            init();
         }
     }
 }
