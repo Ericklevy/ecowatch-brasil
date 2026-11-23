@@ -357,9 +357,12 @@ public class AiRagService {
                 // Série SEEG do município
                 try {
                     EmissoesDTO.MunicipioDetalheDTO det = emissoesService.getMunicipioDetalhe(cap, gas);
-                    if (det != null && !det.getSerieHistorica().isEmpty()) {
-                        String gasReal = (det.getGas() != null && !det.getGas().isBlank()) ? det.getGas() : gas;
+                    boolean gasCompativel = (det != null && det.getGas() != null && 
+                            ("ALL".equalsIgnoreCase(gas) || gas.equalsIgnoreCase(det.getGas())));
+                    if (det != null && !det.getSerieHistorica().isEmpty() && gasCompativel) {
+                        String gasReal = det.getGas();
                         sb.append(String.format("• Histórico de Emissões Municipais (Fonte: SEEG / Observatório do Clima, Coleção 14.0):\n"));
+                        sb.append(String.format("  - Gás oficial registrado: %s\n", gasReal));
                         sb.append(String.format("  - Setor dominante de emissão em %s: %s (%s)\n", cap, det.getSetorDominante(), det.getExplicacaoSetorDominante()));
                         for (EmissoesDTO.SerieAnoDTO anoItem : det.getSerieHistorica()) {
                             sb.append(String.format(Locale.forLanguageTag("pt-BR"), "  - Ano %d: %,.1f t de %s", anoItem.getAno(), anoItem.getEmissaoTotal(), gasReal));
@@ -372,7 +375,8 @@ public class AiRagService {
                             sb.append("\n");
                         }
                     } else {
-                        sb.append(String.format("• Histórico de Emissões Municipais (Fonte: SEEG 14.0): sem dado de %s para o município de %s.\n", gas, cap));
+                        String gasNome = "CH4".equalsIgnoreCase(gas) ? "metano (CH₄)" : gasRotulo;
+                        sb.append(String.format("• Histórico de Emissões Municipais (Fonte: SEEG 14.0): sem dados específicos de %s para o município de %s. NUNCA confunda nem apresente números de CO₂e ou outros gases como se fossem de %s.\n", gasNome, cap, gasNome));
                     }
                 } catch (Exception ex) {
                     log.debug("Erro ao carregar SEEG para {}: {}", cap, ex.getMessage());

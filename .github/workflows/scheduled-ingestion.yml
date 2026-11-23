@@ -16,9 +16,9 @@ jobs:
       - name: Disparar Coleta de Telemetria e Alertas
         run: |
           echo "Disparando coleta agendada de telemetria ambiental..."
-          curl -X POST "https://data-ingestion.wittytree-8ba02066.brazilsouth.azurecontainerapps.io/api/scheduler/trigger" \
+          curl -f -X POST "https://data-ingestion.wittytree-8ba02066.brazilsouth.azurecontainerapps.io/api/scheduler/trigger" \
             -H "Content-Type: application/json" \
-            --connect-timeout 20 \
-            --max-time 90 \
-            --retry 2 \
-            || echo "Requisicao enviada (container em execucao sob demanda)"
+            --connect-timeout 60 \
+            --max-time 120 \
+            --retry 3 \
+            --retry-delay 5

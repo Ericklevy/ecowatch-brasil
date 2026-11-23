@@ -188,10 +188,13 @@ public class ClimateTraceIngestionService {
                                 .orElseGet(EmissorClimateTraceEntity::new);
                     }
 
+                    String nomeFormatado = formatarNomeFonte(nome, sector, assetType);
+                    String subSetorFormatado = traduzirSubSetor(assetType, sector);
+
                     entity.setAssetId(assetId);
-                    entity.setNome(nome);
+                    entity.setNome(nomeFormatado);
                     entity.setSetor(sector);
-                    entity.setSubSetor(assetType);
+                    entity.setSubSetor(subSetorFormatado);
                     entity.setLatitude(lat);
                     entity.setLongitude(lon);
                     entity.setGas(gasDb);
@@ -236,14 +239,104 @@ public class ClimateTraceIngestionService {
     public static String traduzirSetor(String setorOriginal) {
         if (setorOriginal == null) return "Outros";
         String s = setorOriginal.toLowerCase();
+        if (s.contains("water-reservoir") || s.contains("hydro")) return "Geração Hidrelétrica (Represas)";
         if (s.contains("power") || s.contains("electricity")) return "Energia Elétrica (Termelétricas)";
         if (s.contains("waste") || s.contains("disposal") || s.contains("landfill")) return "Resíduos Sólidos e Aterros";
-        if (s.contains("manufacturing") || s.contains("steel") || s.contains("aluminum") || s.contains("cement")) return "Indústria e Metalurgia";
+        if (s.contains("iron") || s.contains("steel") || s.contains("manufacturing") || s.contains("aluminum") || s.contains("cement")) return "Indústria e Siderurgia";
         if (s.contains("oil") || s.contains("gas") || s.contains("fossil") || s.contains("refin")) return "Petróleo e Gás Natural";
-        if (s.contains("mineral") || s.contains("mining")) return "Mineração e Extração Mineral";
-        if (s.contains("agriculture") || s.contains("cattle") || s.contains("enteric") || s.contains("livestock")) return "Agropecuária e Pecuária";
-        if (s.contains("fire") || s.contains("forest") || s.contains("land-use")) return "Uso da Terra e Queimadas";
+        if (s.contains("mineral") || s.contains("mining") || s.contains("coal")) return "Mineração";
+        if (s.contains("rice") || s.contains("agriculture") || s.contains("cattle") || s.contains("enteric") || s.contains("livestock")) return "Agropecuária";
+        if (s.contains("fire") || s.contains("forest") || s.contains("clearing") || s.contains("land-use") || s.contains("wetland") || s.contains("shrubgrass")) return "Mudança do Uso da Terra e Queimadas";
         if (s.contains("transport")) return "Transportes";
         return setorOriginal;
+    }
+
+    public static String traduzirSubSetor(String subSetorOriginal, String setorOriginal) {
+        String sub = (subSetorOriginal != null) ? subSetorOriginal.trim() : "";
+        String subLow = sub.toLowerCase();
+        String secLow = (setorOriginal != null) ? setorOriginal.toLowerCase() : "";
+
+        if (subLow.contains("sanitary landfill")) return "Aterro Sanitário";
+        if (subLow.contains("controlled dumpsite") || subLow.contains("controlled landfill")) return "Aterro Controlado";
+        if (subLow.contains("dumpsite") || subLow.contains("open dump")) return "Lixão a Céu Aberto";
+        if (subLow.contains("hydroelectricity")) return "Usinas Hidrelétricas";
+        if (subLow.contains("navigation")) return "Navegação / Eclusa";
+        if (subLow.contains("surface")) return "Mineração a Céu Aberto";
+        if (subLow.contains("bf/bof") || subLow.contains("blast furnace")) return "Alto-Forno e Siderurgia";
+        if (subLow.contains("closed_forest_evergreen_broad_leaf") || subLow.contains("rainforest")) return "Floresta Tropical Úmida";
+        if (subLow.contains("closed_forest_others")) return "Cobertura Florestal Diversa";
+        if (subLow.contains("shrubgrass")) return "Vegetação Campestre / Cerrado";
+
+        // Inferência por setor quando subSetor não veio da API
+        if (secLow.contains("enteric-fermentation") || secLow.contains("cattle")) return "Fermentação Entérica (Pecuária)";
+        if (secLow.contains("rice")) return "Cultivo de Arroz Irrigado";
+        if (secLow.contains("forest-land-fires")) return "Queimadas Florestais";
+        if (secLow.contains("wetland-fires")) return "Incêndios no Pantanal";
+        if (secLow.contains("shrubgrass-fires")) return "Queimadas em Savana / Cerrado";
+        if (secLow.contains("forest-land-clearing")) return "Desmatamento e Conversão";
+
+        return !sub.isBlank() ? sub.replace("_", " ") : "Atividade Agropecuária / Pontual";
+    }
+
+    public static String formatarNomeFonte(String nomeOriginal, String setorOriginal, String subSetorOriginal) {
+        if (nomeOriginal == null || nomeOriginal.isBlank()) {
+            return "Fonte Emissora";
+        }
+        String nome = nomeOriginal.trim();
+        String secLow = (setorOriginal != null) ? setorOriginal.toLowerCase() : "";
+        String subLow = (subSetorOriginal != null) ? subSetorOriginal.toLowerCase() : "";
+
+        // Trata estimativas agregadas de petróleo/gás que não são um ponto físico único
+        if (nome.contains("OtherBasins") || nome.contains("OtherResources") || nome.equalsIgnoreCase("Brazil_OtherBasins_OtherResources")) {
+            return "Bacias Petrolíferas (Estimativa Agregada Nacional de Óleo e Gás)";
+        }
+
+        // Trata fontes agregadas municipais do Climate TRACE (ex: "São Félix do Xingu Municipality")
+        if (nome.toLowerCase().contains("municipality")) {
+            String mun = nome.replaceAll("(?i)\\s*municipality\\s*", "").trim();
+            if (secLow.contains("enteric") || secLow.contains("cattle") || subLow.contains("cattle") || subLow.contains("pecuária")) {
+                return "Município de " + mun + " (Pecuária)";
+            } else if (secLow.contains("rice") || subLow.contains("rice") || subLow.contains("arroz")) {
+                return "Município de " + mun + " (Cultivo de Arroz)";
+            } else if (secLow.contains("clearing") || subLow.contains("clearing") || subLow.contains("desmatamento")) {
+                return "Município de " + mun + " (Desmatamento)";
+            } else if (secLow.contains("fire") || subLow.contains("fire") || subLow.contains("queimada")) {
+                return "Município de " + mun + " (Queimadas)";
+            } else {
+                return "Município de " + mun;
+            }
+        }
+
+        // Usinas e Represas
+        if (nome.endsWith(" Main Dam")) {
+            return "Represa de " + nome.replace(" Main Dam", "").trim();
+        }
+        if (nome.endsWith(" Dam")) {
+            return "Represa de " + nome.replace(" Dam", "").trim();
+        }
+
+        // Aterros e Resíduos
+        if (nome.endsWith(" Controlled Landfill")) {
+            return "Aterro Controlado " + nome.replace(" Controlled Landfill", "").trim();
+        }
+        if (nome.endsWith(" Landfill")) {
+            return "Aterro Sanitário " + nome.replace(" Landfill", "").trim();
+        }
+        if (nome.contains("Public Solid Waste Landfill")) {
+            return nome.replace("Public Solid Waste Landfill", "Aterro Sanitário Público").trim();
+        }
+        if (nome.contains("Waste Disposal Center")) {
+            return nome.replace("Waste Disposal Center", "Centro de Tratamento de Resíduos").trim();
+        }
+
+        // Indústria, Siderurgia e Mineração
+        if (nome.endsWith(" steel plant")) {
+            return "Siderúrgica " + nome.replace(" steel plant", "").trim();
+        }
+        if (nome.endsWith(" Coal Mine")) {
+            return "Mina de Carvão " + nome.replace(" Coal Mine", "").trim();
+        }
+
+        return nome;
     }
 }

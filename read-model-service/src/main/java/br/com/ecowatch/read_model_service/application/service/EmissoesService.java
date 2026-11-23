@@ -220,11 +220,13 @@ public class EmissoesService {
     }
 
     private FonteEmissaoDTO converterParaFonteDTO(br.com.ecowatch.read_model_service.infrastructure.entity.EmissorClimateTraceEntity e) {
+        String nomeFormatado = ClimateTraceIngestionService.formatarNomeFonte(e.getNome(), e.getSetor(), e.getSubSetor());
+        String subSetorFormatado = ClimateTraceIngestionService.traduzirSubSetor(e.getSubSetor(), e.getSetor());
         return FonteEmissaoDTO.builder()
                 .assetId(e.getAssetId())
-                .nome(e.getNome())
+                .nome(nomeFormatado)
                 .setor(e.getSetor())
-                .subSetor(e.getSubSetor())
+                .subSetor(subSetorFormatado)
                 .setorRotulo(ClimateTraceIngestionService.traduzirSetor(e.getSetor()))
                 .latitude(e.getLatitude())
                 .longitude(e.getLongitude())
