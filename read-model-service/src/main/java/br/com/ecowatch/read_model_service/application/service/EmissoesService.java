@@ -186,8 +186,12 @@ public class EmissoesService {
         String setor = (setorParam != null && !setorParam.isBlank() && !"ALL".equalsIgnoreCase(setorParam)) ? setorParam.trim() : null;
         int limite = (limiteParam != null && limiteParam > 0) ? Math.min(limiteParam, 200) : 100;
 
-        List<br.com.ecowatch.read_model_service.infrastructure.entity.EmissorClimateTraceEntity> entidades =
-                climateTraceRepository.findTopEmissores(gas, setor);
+        List<br.com.ecowatch.read_model_service.infrastructure.entity.EmissorClimateTraceEntity> entidades;
+        if (setor == null) {
+            entidades = climateTraceRepository.findByGasIgnoreCaseOrderByEmissaoTDesc(gas);
+        } else {
+            entidades = climateTraceRepository.findTopEmissores(gas, setor);
+        }
 
         return entidades.stream()
                 .limit(limite)
@@ -201,7 +205,7 @@ public class EmissoesService {
         String uf = (ufParam != null && !ufParam.isBlank() && !"ALL".equalsIgnoreCase(ufParam)) ? ufParam.trim().toUpperCase() : null;
 
         List<br.com.ecowatch.read_model_service.infrastructure.entity.EmissorClimateTraceEntity> todas =
-                climateTraceRepository.findTopEmissores(gas, null);
+                climateTraceRepository.findByGasIgnoreCaseOrderByEmissaoTDesc(gas);
 
         if (uf == null) {
             return todas.stream().limit(limite).map(this::converterParaFonteDTO).collect(Collectors.toList());

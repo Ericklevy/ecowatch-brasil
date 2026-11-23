@@ -14,10 +14,14 @@ public interface EmissorClimateTraceRepository extends JpaRepository<EmissorClim
 
     Optional<EmissorClimateTraceEntity> findByAssetIdAndGas(Long assetId, String gas);
 
+    List<EmissorClimateTraceEntity> findByGasIgnoreCaseOrderByEmissaoTDesc(String gas);
+
     @Query("""
         SELECT e FROM EmissorClimateTraceEntity e
-        WHERE (:gas IS NULL OR UPPER(e.gas) = UPPER(:gas))
-          AND (:setor IS NULL OR LOWER(e.setor) LIKE LOWER(CONCAT('%', :setor, '%')) OR LOWER(e.subSetor) LIKE LOWER(CONCAT('%', :setor, '%')))
+        WHERE (:gas IS NULL OR UPPER(e.gas) = UPPER(CAST(:gas AS string)))
+          AND (:setor IS NULL 
+               OR LOWER(e.setor) LIKE LOWER(CONCAT('%', CAST(:setor AS string), '%')) 
+               OR LOWER(e.subSetor) LIKE LOWER(CONCAT('%', CAST(:setor AS string), '%')))
         ORDER BY e.emissaoT DESC
     """)
     List<EmissorClimateTraceEntity> findTopEmissores(

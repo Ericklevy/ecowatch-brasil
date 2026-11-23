@@ -22,7 +22,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -133,7 +135,7 @@ public class ClimateTraceIngestionService {
                 return 0;
             }
 
-            List<EmissorClimateTraceEntity> entidadesParaSalvar = new ArrayList<>();
+            Map<Long, EmissorClimateTraceEntity> entidadesParaSalvar = new LinkedHashMap<>();
             LocalDateTime agora = LocalDateTime.now();
 
             for (JsonNode assetNode : assetsNode) {
@@ -168,8 +170,11 @@ public class ClimateTraceIngestionService {
 
                     int ano = extrairAnoMaisRecente(assetNode);
 
-                    EmissorClimateTraceEntity entity = repository.findByAssetIdAndGas(assetId, gasDb)
-                            .orElseGet(EmissorClimateTraceEntity::new);
+                    EmissorClimateTraceEntity entity = entidadesParaSalvar.get(assetId);
+                    if (entity == null) {
+                        entity = repository.findByAssetIdAndGas(assetId, gasDb)
+                                .orElseGet(EmissorClimateTraceEntity::new);
+                    }
 
                     entity.setAssetId(assetId);
                     entity.setNome(nome);
@@ -182,14 +187,14 @@ public class ClimateTraceIngestionService {
                     entity.setAno(ano);
                     entity.setAtualizadoEm(agora);
 
-                    entidadesParaSalvar.add(entity);
+                    entidadesParaSalvar.put(assetId, entity);
                 } catch (Exception itemEx) {
                     log.debug("Erro ao processar item do Climate TRACE: {}", itemEx.getMessage());
                 }
             }
 
             if (!entidadesParaSalvar.isEmpty()) {
-                repository.saveAll(entidadesParaSalvar);
+                repository.saveAll(entidadesParaSalvar.values());
             }
             return entidadesParaSalvar.size();
 
