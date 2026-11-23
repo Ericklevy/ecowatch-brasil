@@ -76,6 +76,15 @@ public class ClimateTraceIngestionService {
                 log.debug("Aviso ao criar índices em emissores_climatetrace: {}", ex.getMessage());
             }
 
+            try {
+                int cleaned = jdbcTemplate.update("DELETE FROM emissores_climatetrace WHERE nome LIKE 'Brazil_Other%' OR nome LIKE '%OtherBasins%' OR LOWER(nome) LIKE '%other resources%';");
+                if (cleaned > 0) {
+                    log.info("Removidas {} fontes agregadas não-pontuais do Climate TRACE da base.", cleaned);
+                }
+            } catch (Exception ex) {
+                log.debug("Aviso ao limpar fontes agregadas do Climate TRACE: {}", ex.getMessage());
+            }
+
             long count = repository.count();
             log.info("📊 emissores_climatetrace carregados no banco: {}", count);
             if (count == 0) {
@@ -142,6 +151,9 @@ public class ClimateTraceIngestionService {
                 try {
                     Long assetId = assetNode.path("Id").asLong();
                     String nome = assetNode.path("Name").asText("Fonte sem nome");
+                    if (nome.startsWith("Brazil_Other") || nome.contains("OtherBasins") || nome.contains("_OtherResources") || nome.toLowerCase().contains("other resources")) {
+                        continue;
+                    }
                     String sector = assetNode.path("Sector").asText("desconhecido");
                     String assetType = assetNode.path("AssetType").asText(null);
 

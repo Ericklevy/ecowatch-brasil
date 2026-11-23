@@ -72,13 +72,19 @@ public class SeegDatabaseInitializer {
         try {
             Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM emissoes_municipio", Long.class);
             Integer maxAno = jdbcTemplate.queryForObject("SELECT MAX(ano) FROM emissoes_municipio", Integer.class);
+            Long ch4Count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM emissoes_municipio WHERE gas = 'CH4'", Long.class);
 
-            // Importa só se a tabela estiver vazia ou o ano for novo
-            boolean precisaImportar = (count == null || count == 0 || maxAno == null || maxAno < 2023);
+            // Importa se a tabela estiver vazia, ano desatualizado ou se faltarem dados de metano nacional (menos de 5000 registros de CH4 indica carga antiga só do PA)
+            boolean precisaImportar = (count == null || count == 0 || maxAno == null || maxAno < 2023 || ch4Count == null || ch4Count < 5000);
 
             if (!precisaImportar) {
-                log.info("Base de emissões SEEG já populada: {} registros encontrados (último ano: {}).", count, maxAno);
+                log.info("Base de emissões SEEG já populada: {} registros encontrados (último ano: {}, registros CH4: {}).", count, maxAno, ch4Count);
                 return;
+            }
+
+            if (count != null && count > 0) {
+                log.info("Substituindo base de emissões SEEG incompleta ({} registros, {} CH4) pela carga nacional consolidada...", count, ch4Count);
+                jdbcTemplate.execute("TRUNCATE TABLE emissoes_municipio;");
             }
 
             Resource resource = new ClassPathResource("data/seeg_municipios_5anos.csv");

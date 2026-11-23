@@ -27,7 +27,7 @@ public interface EmissaoMunicipioRepository extends JpaRepository<EmissaoMunicip
     @Query("""
         SELECT e.uf as uf, e.ano as ano, e.gas as gas, SUM(e.emissaoT) as total
         FROM EmissaoMunicipioEntity e
-        WHERE e.gas = :gas AND e.ano = :ano
+        WHERE e.gas = :gas AND e.ano = :ano AND UPPER(e.uf) != 'NA'
         GROUP BY e.uf, e.ano, e.gas
         ORDER BY total DESC
     """)
@@ -36,7 +36,7 @@ public interface EmissaoMunicipioRepository extends JpaRepository<EmissaoMunicip
     @Query("""
         SELECT e.codigoIbge as codigoIbge, e.municipio as municipio, e.uf as uf, e.ano as ano, e.gas as gas, SUM(e.emissaoT) as total
         FROM EmissaoMunicipioEntity e
-        WHERE e.gas = :gas AND e.ano = :ano AND (:uf IS NULL OR e.uf = :uf)
+        WHERE e.gas = :gas AND e.ano = :ano AND (:uf IS NULL OR e.uf = :uf) AND UPPER(e.uf) != 'NA'
         GROUP BY e.codigoIbge, e.municipio, e.uf, e.ano, e.gas
         ORDER BY total DESC
     """)

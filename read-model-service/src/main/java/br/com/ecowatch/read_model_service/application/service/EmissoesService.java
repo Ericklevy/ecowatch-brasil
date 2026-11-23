@@ -121,10 +121,10 @@ public class EmissoesService {
 
     public MunicipioDetalheDTO getMunicipioDetalhe(String nome, String gasParam) {
         String gas = normalizarGas(gasParam);
-        List<EmissaoMunicipioEntity> entries = repository.findByMunicipioIgnoreCaseAndGasOrderByAnoAsc(nome, gas);
-
-        if (entries.isEmpty()) {
-            // Tenta fallback com like ou qualquer gás
+        List<EmissaoMunicipioEntity> entries;
+        if (gas != null && !gas.isBlank() && !"ALL".equalsIgnoreCase(gas)) {
+            entries = repository.findByMunicipioIgnoreCaseAndGasOrderByAnoAsc(nome, gas);
+        } else {
             entries = repository.findByMunicipioIgnoreCaseOrderByAnoAsc(nome);
         }
 
@@ -135,6 +135,7 @@ public class EmissoesService {
         String codigoIbge = entries.get(0).getCodigoIbge();
         String munNome = entries.get(0).getMunicipio();
         String uf = entries.get(0).getUf();
+        String gasReal = entries.get(0).getGas();
 
         // Agrupa por ano
         Map<Integer, List<EmissaoMunicipioEntity>> porAno = entries.stream()
@@ -174,7 +175,7 @@ public class EmissoesService {
                 .codigoIbge(codigoIbge)
                 .municipio(munNome)
                 .uf(uf)
-                .gas(gas)
+                .gas(gasReal)
                 .setorDominante(setorDominante)
                 .explicacaoSetorDominante(explicacao)
                 .serieHistorica(serie)

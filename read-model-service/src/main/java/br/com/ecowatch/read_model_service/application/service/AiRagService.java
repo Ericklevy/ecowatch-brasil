@@ -356,10 +356,11 @@ public class AiRagService {
                 try {
                     EmissoesDTO.MunicipioDetalheDTO det = emissoesService.getMunicipioDetalhe(cap, gas);
                     if (det != null && !det.getSerieHistorica().isEmpty()) {
+                        String gasReal = (det.getGas() != null && !det.getGas().isBlank()) ? det.getGas() : gas;
                         sb.append(String.format("• Histórico de Emissões Municipais (Fonte: SEEG / Observatório do Clima, Coleção 14.0):\n"));
                         sb.append(String.format("  - Setor dominante de emissão em %s: %s (%s)\n", cap, det.getSetorDominante(), det.getExplicacaoSetorDominante()));
                         for (EmissoesDTO.SerieAnoDTO anoItem : det.getSerieHistorica()) {
-                            sb.append(String.format(Locale.forLanguageTag("pt-BR"), "  - Ano %d: %,.1f t de %s", anoItem.getAno(), anoItem.getEmissaoTotal(), gas));
+                            sb.append(String.format(Locale.forLanguageTag("pt-BR"), "  - Ano %d: %,.1f t de %s", anoItem.getAno(), anoItem.getEmissaoTotal(), gasReal));
                             if (anoItem.getQuebraPorSetor() != null && !anoItem.getQuebraPorSetor().isEmpty()) {
                                 String quebraStr = anoItem.getQuebraPorSetor().entrySet().stream()
                                         .map(s -> String.format(Locale.forLanguageTag("pt-BR"), "%s: %,.0f t", s.getKey(), s.getValue()))
@@ -368,6 +369,8 @@ public class AiRagService {
                             }
                             sb.append("\n");
                         }
+                    } else {
+                        sb.append(String.format("• Histórico de Emissões Municipais (Fonte: SEEG 14.0): sem dado de %s para o município de %s.\n", gas, cap));
                     }
                 } catch (Exception ex) {
                     log.debug("Erro ao carregar SEEG para {}: {}", cap, ex.getMessage());
