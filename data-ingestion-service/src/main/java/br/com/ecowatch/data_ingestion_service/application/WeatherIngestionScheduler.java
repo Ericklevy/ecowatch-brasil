@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>Para cada cidade, o ciclo executa em 2 fases:
  * <ol>
- *   <li><strong>Clima base:</strong> NASA POWER (primária) → Open-Meteo (fallback)</li>
+ *   <li><strong>Clima base:</strong> Open-Meteo (tempo real, primária) → NASA POWER (fallback)</li>
  *   <li><strong>Enriquecimento:</strong> Open-Meteo Air Quality → INPE → CEMADEN → ANA</li>
  * </ol>
  * O resultado consolidado é publicado no tópico Kafka {@code weather-readings}.</p>
@@ -61,8 +61,8 @@ public class WeatherIngestionScheduler {
     @Getter private final AtomicInteger totalCitiesFailed = new AtomicInteger(0);
 
     public WeatherIngestionScheduler(
-            WeatherClient primaryClient,
-            @Qualifier("openMeteoClient") WeatherClient fallbackClient,
+            @Qualifier("openMeteoClient") WeatherClient primaryClient,
+            @Qualifier("nasaPowerClient") WeatherClient fallbackClient,
             WeatherKafkaProducer kafkaProducer,
             MetricsService metricsService,
             OpenMeteoAirQualityClient airQualityClient,
@@ -143,7 +143,7 @@ public class WeatherIngestionScheduler {
             WeatherReading reading = null;
             String sourceUsed = "nenhuma";
 
-            // 1. Tenta com a fonte primária (NASA POWER)
+            // 1. Tenta com a fonte primária (Open-Meteo)
             try {
                 reading = primaryClient.fetchWeather(cityTrimmed);
                 if (reading != null) {
@@ -156,7 +156,7 @@ public class WeatherIngestionScheduler {
                 log.error("❌ [{}] Erro no {}: {}", cityTrimmed, primaryClient.getSourceName(), e.getMessage());
             }
 
-            // 2. Se falhou, usa fallback (Open-Meteo)
+            // 2. Se falhou, usa fallback (NASA POWER)
             if (reading == null) {
                 try {
                     reading = fallbackClient.fetchWeather(cityTrimmed);
@@ -240,7 +240,7 @@ public class WeatherIngestionScheduler {
         WeatherReading reading = null;
         String sourceUsed = "nenhuma";
 
-        // 1. Tenta fonte primária (NASA POWER)
+        // 1. Tenta fonte primária (Open-Meteo)
         try {
             reading = primaryClient.fetchWeather(cityTrimmed);
             if (reading != null) {
@@ -250,7 +250,7 @@ public class WeatherIngestionScheduler {
             log.warn("⚠️ [ON-DEMAND] Falha no {}: {}", primaryClient.getSourceName(), e.getMessage());
         }
 
-        // 2. Fallback (Open-Meteo)
+        // 2. Fallback (NASA POWER)
         if (reading == null) {
             try {
                 reading = fallbackClient.fetchWeather(cityTrimmed);

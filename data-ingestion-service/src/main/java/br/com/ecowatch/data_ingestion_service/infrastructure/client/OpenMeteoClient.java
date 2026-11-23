@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -19,7 +20,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 @Slf4j
-@Component
+@Component("openMeteoClient")
+@Primary
 public class OpenMeteoClient implements WeatherClient {
 
     private final WebClient webClient;

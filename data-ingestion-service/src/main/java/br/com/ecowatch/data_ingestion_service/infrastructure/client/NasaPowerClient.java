@@ -24,8 +24,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-@Component
-@Primary
+@Component("nasaPowerClient")
 public class NasaPowerClient implements WeatherClient {
 
     private final WebClient webClient;
