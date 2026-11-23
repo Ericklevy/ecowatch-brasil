@@ -426,6 +426,77 @@ public class AiRagService {
                 log.debug("Erro ao carregar fontes Climate TRACE: {}", ex.getMessage());
             }
             sb.append("\n");
+        } else {
+            // Se nenhum estado ou capital foi citado: inclui ranking nacional dos Top Estados e Top Municípios do Brasil
+            String qNorm = CityNameNormalizer.normalize(pergunta).toLowerCase();
+            boolean querMetano = qNorm.contains("metano") || qNorm.contains("ch4");
+            boolean querCo2 = qNorm.contains("co2") || qNorm.contains("carbono");
+
+            List<String> gasesNacionais = new ArrayList<>();
+            if (querMetano) gasesNacionais.add("CH4");
+            if (querCo2) gasesNacionais.add("CO2e");
+            if (gasesNacionais.isEmpty()) gasesNacionais.add(gas);
+
+            for (String g : gasesNacionais) {
+                String gRotulo = "CH4".equalsIgnoreCase(g) ? "Metano (CH₄)" : "CO₂ equivalente (CO₂e)";
+                sb.append(String.format("--- TOP 5 ESTADOS QUE MAIS EMITEM %s NO BRASIL (Fonte: SEEG 14.0, Ano 2023) ---\n", gRotulo));
+                try {
+                    List<EmissoesDTO.EmissaoEstadoItem> estados = emissoesService.getEstados(g, 2023);
+                    if (estados != null && !estados.isEmpty()) {
+                        int limiteEstados = Math.min(5, estados.size());
+                        for (int i = 0; i < limiteEstados; i++) {
+                            EmissoesDTO.EmissaoEstadoItem est = estados.get(i);
+                            sb.append(String.format(Locale.forLanguageTag("pt-BR"),
+                                    "%d. %s: %,.1f t de %s/ano | Setor principal: %s (%.1f%%) | %s\n",
+                                    i + 1, est.getUf(), est.getEmissaoTotal(), g,
+                                    est.getSetorPrincipal(), est.getPercentualSetorPrincipal(), est.getExplicacaoSetor()));
+                        }
+                    } else {
+                        sb.append("Sem dados estaduais disponíveis.\n");
+                    }
+                } catch (Exception ex) {
+                    log.debug("Erro ao carregar top estados {}: {}", g, ex.getMessage());
+                }
+                sb.append("\n");
+
+                sb.append(String.format("--- TOP 5 MUNICÍPIOS QUE MAIS EMITEM %s NO BRASIL (Fonte: SEEG 14.0, Ano 2023) ---\n", gRotulo));
+                try {
+                    List<EmissoesDTO.RankingMunicipioItem> ranking = emissoesService.getRanking(g, null, 2023, 5);
+                    if (ranking != null && !ranking.isEmpty()) {
+                        for (int i = 0; i < ranking.size(); i++) {
+                            EmissoesDTO.RankingMunicipioItem item = ranking.get(i);
+                            sb.append(String.format(Locale.forLanguageTag("pt-BR"),
+                                    "%d. %s (%s): %,.1f t de %s/ano | Setor principal: %s (%.1f%%) | %s\n",
+                                    i + 1, item.getMunicipio(), item.getUf(), item.getEmissaoTotal(), item.getGas(),
+                                    item.getSetorPrincipal(), item.getPercentualSetorPrincipal(), item.getExplicacaoSetor()));
+                        }
+                    } else {
+                        sb.append("Sem dados de ranking municipal disponíveis.\n");
+                    }
+                } catch (Exception ex) {
+                    log.debug("Erro ao carregar ranking nacional de municípios {}: {}", g, ex.getMessage());
+                }
+                sb.append("\n");
+
+                sb.append(String.format("--- TOP FONTES PONTUAIS DO BRASIL DE %s (Fonte: Climate TRACE, CC BY 4.0) ---\n", gRotulo));
+                try {
+                    List<EmissoesDTO.FonteEmissaoDTO> fontesTrace = emissoesService.getFontesEmissao(g, null, 5);
+                    if (fontesTrace != null && !fontesTrace.isEmpty()) {
+                        for (int i = 0; i < fontesTrace.size(); i++) {
+                            EmissoesDTO.FonteEmissaoDTO f = fontesTrace.get(i);
+                            sb.append(String.format(Locale.forLanguageTag("pt-BR"),
+                                    "%d. %s [%s - %s]: %,.1f t/ano (Ano %d)\n",
+                                    i + 1, f.getNome(), f.getSetorRotulo(), f.getSubSetor() != null ? f.getSubSetor() : "instalação",
+                                    f.getEmissaoAnualT(), f.getAno()));
+                        }
+                    } else {
+                        sb.append("Nenhuma grande fonte pontual encontrada.\n");
+                    }
+                } catch (Exception ex) {
+                    log.debug("Erro ao carregar fontes pontuais nacionais Climate TRACE: {}", ex.getMessage());
+                }
+                sb.append("\n");
+            }
         }
 
         return sb.toString();
@@ -672,6 +743,7 @@ public class AiRagService {
                   * "Concentração atmosférica no ar" (modelo Copernicus CAMS / Open-Meteo, leitura recente, em µg/m³ ou ppm) mede a qualidade física do ar disperso e NÃO indica quem emite.
                   * "Emissões anuais" (SEEG por município ou Climate TRACE por instalação, em toneladas de CO₂e ou CH₄) indicam o quanto de gás é lançado na atmosfera pelo município ou fábrica.
                 - NUNCA use LaTeX ($ ou \\text{}). Escreva fórmulas sempre em texto simples com subscritos: CH₄, CO₂, N₂O, CO₂e.
+                - Se a pergunta for geral sobre o Brasil ou sobre quais estados/lugares mais emitem, apresente os rankings nacionais de estados fornecidos no contexto com seus respectivos setores dominantes e valores.
                 - SEMPRE cite a fonte e o ano de cada dado (ex.: "Segundo o SEEG (2023)...", "De acordo com o Climate TRACE (2024)...", "Pelo modelo Copernicus CAMS hoje...").
                 - NUNCA invente números de emissões ou concentrações. Se o dado não existir, diga com clareza.
 

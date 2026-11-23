@@ -108,6 +108,32 @@ class AiRagServiceTest {
     }
 
     @Test
+    void montaContextoEmissoesGeralSemEstado() {
+        EmissoesService emissoesMock = org.mockito.Mockito.mock(EmissoesService.class);
+        AiRagService service = new AiRagService(null, null, null, emissoesMock, null);
+
+        var estadoItem = br.com.ecowatch.read_model_service.application.dto.EmissoesDTO.EmissaoEstadoItem.builder()
+                .uf("MT")
+                .ano(2023)
+                .gas("CH4")
+                .emissaoTotal(2500000.0)
+                .setorPrincipal("Agropecuária")
+                .percentualSetorPrincipal(85.0)
+                .explicacaoSetor("pecuária bovina")
+                .build();
+
+        org.mockito.Mockito.when(emissoesMock.getEstados("CH4", 2023))
+                .thenReturn(List.of(estadoItem));
+
+        String contexto = service.montarContextoEmissoes("Quais estados mais emitem metano e CO2?", List.of(), null);
+
+        assertNotNull(contexto);
+        assertTrue(contexto.contains("TOP 5 ESTADOS QUE MAIS EMITEM"));
+        assertTrue(contexto.contains("MT: 2.500.000,0 t de CH4/ano"));
+        assertTrue(contexto.contains("Agropecuária"));
+    }
+
+    @Test
     void sanitizaLatexCorretamente() {
         String input = "O metano ($\\text{CH}_4$) em Manaus indica **$2337\\text{ µg/m³}$**. Manaus emitiu **$33.231,5\\text{ toneladas de }\\text{CH}_4$**.";
         String output = AiRagService.sanitizeLatex(input);
