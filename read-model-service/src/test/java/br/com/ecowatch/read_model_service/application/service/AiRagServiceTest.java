@@ -106,4 +106,15 @@ class AiRagServiceTest {
         assertTrue(contexto.contains("Climate TRACE"));
         assertTrue(contexto.contains("SEEG"));
     }
+
+    @Test
+    void sanitizaLatexCorretamente() {
+        String input = "O metano ($\\text{CH}_4$) em Manaus indica **$2337\\text{ µg/m³}$**. Manaus emitiu **$33.231,5\\text{ toneladas de }\\text{CH}_4$**.";
+        String output = AiRagService.sanitizeLatex(input);
+        assertFalse(output.contains("$"));
+        assertFalse(output.contains("\\text"));
+        assertTrue(output.contains("CH₄"));
+        assertTrue(output.contains("2337 µg/m³"));
+        assertTrue(output.contains("33.231,5 toneladas de CH₄"));
+    }
 }

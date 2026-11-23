@@ -210,6 +210,8 @@ public class AiRagService {
             modeloUtilizado = "ecowatch-rag-synthesizer";
         }
 
+        respostaFinal = sanitizeLatex(respostaFinal);
+
         long elapsedMs = System.currentTimeMillis() - startTime;
 
         return AiAskResponse.builder()
@@ -663,11 +665,13 @@ public class AiRagService {
                 4. Quando usar NOTÍCIAS, cite a fonte e a data (ex.: "segundo a Defesa Civil, em 20/11").
                 5. Em situação de risco, oriente a seguir a Defesa Civil local (telefone 199).
                 6. Pode usar **negrito** e listas com "- ".
+                7. FORMATAÇÃO E FÓRMULAS QUÍMICAS: O site NÃO interpreta código LaTeX nem matemática Markdown. NUNCA use cifrões ($ ou $$), \\text{...} ou notação matemática LaTeX. Escreva sempre as fórmulas usando os números pequenos normais de texto: "CH₄" e "CO₂" (e também "N₂O", "CO₂e"). Escreva unidades sempre em texto puro (ex.: µg/m³, ppm, t/ano, toneladas).
 
                 REGRAS OBRIGATÓRIAS PARA GASES DE EFEITO ESTUFA E EMISSÕES:
                 - DIFERENCIAÇÃO FUNDAMENTAL:
                   * "Concentração atmosférica no ar" (modelo Copernicus CAMS / Open-Meteo, leitura recente, em µg/m³ ou ppm) mede a qualidade física do ar disperso e NÃO indica quem emite.
                   * "Emissões anuais" (SEEG por município ou Climate TRACE por instalação, em toneladas de CO₂e ou CH₄) indicam o quanto de gás é lançado na atmosfera pelo município ou fábrica.
+                - NUNCA use LaTeX ($ ou \\text{}). Escreva fórmulas sempre em texto simples com subscritos: CH₄, CO₂, N₂O, CO₂e.
                 - SEMPRE cite a fonte e o ano de cada dado (ex.: "Segundo o SEEG (2023)...", "De acordo com o Climate TRACE (2024)...", "Pelo modelo Copernicus CAMS hoje...").
                 - NUNCA invente números de emissões ou concentrações. Se o dado não existir, diga com clareza.
 
@@ -951,5 +955,30 @@ public class AiRagService {
 
     public boolean isGeminiConfigured() {
         return geminiApiKey != null && !geminiApiKey.trim().isBlank();
+    }
+
+    public static String sanitizeLatex(String text) {
+        if (text == null || text.isBlank()) return text;
+        String s = text;
+        // Substitui notações químicas LaTeX pelos caracteres subscritos unicode
+        s = s.replaceAll("(?i)\\\\text\\{CH\\}_?4", "CH₄");
+        s = s.replaceAll("(?i)\\\\text\\{CO\\}_?2e", "CO₂e");
+        s = s.replaceAll("(?i)\\\\text\\{CO\\}_?2", "CO₂");
+        s = s.replaceAll("(?i)\\\\text\\{N\\}_?2O", "N₂O");
+        s = s.replaceAll("(?i)CH_4", "CH₄");
+        s = s.replaceAll("(?i)CO_2e", "CO₂e");
+        s = s.replaceAll("(?i)CO_2", "CO₂");
+        s = s.replaceAll("(?i)N_2O", "N₂O");
+
+        // Desembrulha \text{...}
+        s = s.replaceAll("\\\\text\\{([^\\}]+)\\}", "$1");
+
+        // Desembrulha blocos matemáticos $...$ ou $$...$$
+        s = s.replaceAll("\\$\\$([^\\$]+)\\$\\$", "$1");
+        s = s.replaceAll("\\$([^\\$]+)\\$", "$1");
+
+        // Remove quaisquer cifrões ou barras invertidas órfãs de LaTeX
+        s = s.replace("$", "");
+        return s;
     }
 }
