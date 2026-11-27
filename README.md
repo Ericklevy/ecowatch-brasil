@@ -151,7 +151,7 @@ Camada de persistência desacoplada com Spring Data JPA, permitindo trocar o ban
 | **Push** | Firebase Cloud Messaging (FCM) | — |
 | **Contêiner** | Docker + Docker Compose | — |
 | **Cloud** | Azure Container Apps | Serverless (Scale-to-Zero) |
-| **Registry** | Azure Container Registry (ACR) | Basic |
+| **Registry** | GitHub Container Registry (`ghcr.io`) | Imagens públicas via GitHub Actions (R$ 0,00) |
 | **Observabilidade** | Micrometer + Prometheus | — |
 | **Documentação API** | Swagger / OpenAPI 3 | — |
 
@@ -227,6 +227,25 @@ Para contornar essa restrição sem sacrificar a robustez arquitetural (Event-Dr
 
 ---
 
+### 6. A Troca do Registro de Imagens Docker: Azure Container Registry (ACR) ➔ GitHub Container Registry (`ghcr.io`)
+
+* **O Problema no Azure:** Mesmo no plano mais simples (*Basic*), o Azure Container Registry (`ecowatchacr4705`) cobrava uma taxa fixa diária de **~R$ 0,90/dia (~R$ 27,00/mês)** apenas para armazenar as imagens Docker, independentemente de haver deploys ou tráfego.
+* **A Solução Gratuita (`ghcr.io` + GitHub Actions):**
+  - Criação do workflow `.github/workflows/ghcr-publish.yml`, que compila e publica automaticamente as 5 imagens Docker em **`ghcr.io/ericklevy/<servico>:latest`** nos runners gratuitos do GitHub Actions.
+  - Os 5 **Azure Container Apps** continuam rodando em nuvem na região `brazilsouth` (com `minReplicas = 0` / *scale-to-zero*), puxando as imagens públicas diretamente do `ghcr.io`.
+  - O recurso pago do ACR foi excluído definitivamente, zerando a única cobrança fixa diária remanescente sem alterar o funcionamento em produção.
+  - **Custo:** **R$ 0,00**.
+
+---
+
+### 7. Precisão de Dados em Tempo Real e Melhorias Recentes
+
+* **Open-Meteo como Fonte Meteorológica Primária (`@Primary`):** A prioridade de coleta no `data-ingestion-service` foi invertida para usar a **Open-Meteo** em tempo real como fonte primária (mantendo a **NASA POWER** como *fallback*), garantindo que os ciclos agendados (07h, 13h e 19h BRT) gravem no cache Redis a temperatura, umidade e precipitação reais daquele momento (em vez de dados históricos consolidados com defasagem de dias).
+* **Agendador Resiliente a Cold Start:** O workflow `.github/workflows/scheduled-ingestion.yml` foi ajustado com timeouts estendidos (`--connect-timeout 60`, `--max-time 120`) e falha explícita (`-f`, sem mascaramento de erro) para despertar os containers em *scale-to-zero* com confiabilidade.
+* **Normalização Climate TRACE & Assistente IA (Gota RAG):** Nomes de fontes emissoras do Climate TRACE foram padronizados para português claro e o contexto RAG da IA passou a incluir automaticamente rankings **Top 5 de estados e municípios (SEEG)** em perguntas gerais sobre o Brasil, além de formatação limpa com subscritos Unicode (`CH₄`, `CO₂`).
+
+---
+
 ### 📊 Comparativo Detalhado de Custos: Infraestrutura Azure vs Arquitetura Otimizada
 
 | Componente | Abordagem Azure Convencional | Solução Híbrida Adotada no EcoWatch | Custo Estimado (Antes) | Custo Atual | Economia Mensal |
@@ -235,9 +254,10 @@ Para contornar essa restrição sem sacrificar a robustez arquitetural (Event-Dr
 | **Banco Relacional** | Azure Database for PostgreSQL (B1ms) | **Supabase PostgreSQL 15** (PgBouncer IPv4) | ~US$ 30,00 (~R$ 170,00) | **R$ 0,00** | 100% |
 | **Cache em Memória** | Azure Cache for Redis (Basic C0) | **Upstash Redis Serverless** (TLS nativo) | ~US$ 16,00 (~R$ 90,00) | **R$ 0,00** | 100% |
 | **Agendamento Cron** | Container 24/7 ligado (minReplicas = 1) | **GitHub Actions Scheduler** + Scale-to-Zero | ~US$ 12,00 (~R$ 68,00) | **R$ 0,00** | 100% |
+| **Container Registry** | Azure Container Registry (Basic) | **GitHub Container Registry (`ghcr.io`)** + GitHub Actions | ~US$ 5,00 (~R$ 27,00) | **R$ 0,00** | 100% |
 | **API de Notícias** | NewsAPI Developer / Pro Plan | **RSS Feeds Oficiais Gov/EBC** + Sanitizador Semântico | ~US$ 50,00 (~R$ 280,00) | **R$ 0,00** | 100% |
 | **Computação App** | Azure Container Apps (Always-on) | **Azure Container Apps** (Scale-to-Zero dentro do Free Tier) | ~US$ 15,00 (~R$ 85,00) | **R$ 0,00** | 100% |
-| **TOTAL ESTIMADO** | Infraestrutura Proprietária Contínua | **Arquitetura Híbrida Zero-Cost** | **~US$ 138,00 (~R$ 778,00/mês)** | **R$ 0,00 / mês** | **100% de Economia** |
+| **TOTAL ESTIMADO** | Infraestrutura Proprietária Contínua | **Arquitetura Híbrida Zero-Cost** | **~US$ 143,00 (~R$ 805,00/mês)** | **R$ 0,00 / mês** | **100% de Economia** |
 
 ---
 
@@ -412,7 +432,7 @@ curl http://localhost:8086/api/dashboard/brasilia
 | Recurso | Nome | Tipo / Provedor |
 |---------|------|-----------------|
 | Resource Group | `ecowatch-rg` | Azure Resource Group (`brazilsouth`) |
-| Container Registry | `ecowatchacr4705` | Azure Container Registry (Basic) |
+| Container Registry | `ghcr.io/ericklevy/*` | GitHub Container Registry (Público / Gratuito) |
 | Streaming (Kafka) | Aiven Cloud / Azure Event Hubs | Broker Gerenciado (SASL_SSL / SCRAM-SHA-256) |
 | Container Apps Environment | `ecowatch-env` | Azure ACA Serverless (Scale-to-Zero) |
 | RabbitMQ | `rabbitmq` | Container App (interno) |
@@ -522,9 +542,9 @@ O sistema monitora **todas as 27 capitais brasileiras** (26 estados + Distrito F
 
 | Dado | Fonte | Descrição |
 |------|-------|-----------|
-| 🌡️ Temperatura | NASA Power / Open-Meteo | Temperatura do ar em °C |
-| 💧 Umidade | NASA Power / Open-Meteo | Umidade relativa do ar em % |
-| 🌧️ Precipitação | NASA Power / Open-Meteo | Volume de chuva em mm |
+| 🌡️ Temperatura | Open-Meteo (`@Primary`) / NASA POWER (fallback) | Temperatura do ar em tempo real em °C |
+| 💧 Umidade | Open-Meteo (`@Primary`) / NASA POWER (fallback) | Umidade relativa do ar em % |
+| 🌧️ Precipitação | Open-Meteo (`@Primary`) / NASA POWER (fallback) | Volume de chuva em mm |
 | 🌫️ PM2.5 | Open-Meteo Air Quality | Material particulado fino (µg/m³) |
 | 🌫️ PM10 | Open-Meteo Air Quality | Material particulado grosso (µg/m³) |
 | 💨 Metano (CH₄) | Open-Meteo / Copernicus CAMS | Concentração atmosférica de metano (µg/m³) |
@@ -569,6 +589,8 @@ ecowatch-brasil/
 ├── README.md                       # Este arquivo
 │
 ├── .github/workflows/              # Automações CI/CD e Agendador Serverless
+│   ├── ci.yml                      # Testes automatizados Maven dos 5 serviços
+│   ├── ghcr-publish.yml            # Build e publicação gratuita de imagens no GHCR (ghcr.io)
 │   └── scheduled-ingestion.yml     # Cron 3x/dia sob demanda no GitHub Actions (R$ 0,00)
 │
 ├── data-ingestion-service/         # Coleta de dados (WebFlux/Netty)
