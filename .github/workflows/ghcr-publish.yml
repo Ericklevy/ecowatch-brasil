@@ -1,0 +1,52 @@
+name: Publish Docker Images to GHCR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'alert-service/**'
+      - 'analytics-service/**'
+      - 'data-ingestion-service/**'
+      - 'notification-service/**'
+      - 'read-model-service/**'
+      - '.github/workflows/ghcr-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build & Push ${{ matrix.servico }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servico:
+          - alert-service
+          - analytics-service
+          - data-ingestion-service
+          - notification-service
+          - read-model-service
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_NAME="ghcr.io/ericklevy/${{ matrix.servico }}"
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/Ericklevy/ecowatch-brasil" \
+            -t "${IMAGE_NAME}:latest" \
+            -t "${IMAGE_NAME}:${{ github.sha }}" \
+            "./${{ matrix.servico }}"
+          docker push "${IMAGE_NAME}:latest"
+          docker push "${IMAGE_NAME}:${{ github.sha }}"
